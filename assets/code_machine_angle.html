@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=PT+Sans+Narrow:wght@400;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root { --bg: #0b0b0b; --ui-white: #ffffff; --panel-bg: #161616; --text-dim: #888; --unselected-text: #444; }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; width: 100%; margin: 0; background: var(--bg); color: white; font-family: 'PT Sans Narrow', sans-serif; overflow: hidden; }
+        body, .app-container { display: flex; justify-content: center; align-items: center; }
+        .app-container { width: 100vw; height: 100vh; padding: 15px; gap: 15px; }
+
+        @media (orientation: portrait) {
+            .app-container { flex-direction: column-reverse; }
+            .sidebar { width: 100%; max-height: 48%; display: flex; flex-direction: column; }
+            .controls-container { grid-template-columns: 1fr 1fr; gap: 10px; padding: 12px; }
+            #selects-wrapper { display: contents; }
+            .reset-btn { grid-column: span 2; margin-top: 5px; }
+            .svg-wrapper { flex: 1; width: 100%; min-height: 0; }
+            .console-header { font-size: 20px; margin-bottom: 8px; text-align: center; }
+            .console-footer { display: none; }
+        }
+
+        @media (orientation: landscape) {
+            .app-container { flex-direction: row; padding: 20px; }
+            .sidebar { width: 320px; height: 100%; display: flex; flex-direction: column; }
+            .controls-container { grid-template-columns: 1fr; padding: 20px; gap: 14px; }
+            #selects-wrapper { display: flex; flex-direction: column; gap: 14px; }
+            .svg-wrapper { flex: 1; height: 100%; min-width: 0; padding-top: 40px; }
+            .console-header { font-size: 26px; margin-bottom: 12px; }
+            .console-footer { font-size: 14px; color: var(--text-dim); margin-top: auto; padding-top: 15px; }
+        }
+
+        .controls-container { background: var(--panel-bg); border-radius: 12px; border: 1px solid #333; display: grid; }
+        .control-group { display: flex; flex-direction: column; gap: 5px; }
+        .control-label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-dim); letter-spacing: 0.8px; }
+
+        select, .reset-btn { font-family: 'PT Sans Narrow', sans-serif; border: 1.5px solid var(--ui-white); border-radius: 6px; cursor: pointer; outline: none; }
+        select { padding: 10px; background: #000; color: var(--ui-white); font-size: 14px; width: 100%; }
+        .reset-btn { background: transparent; color: var(--ui-white); padding: 12px; font-size: 13px; font-weight: 700; text-transform: uppercase; margin-top: 5px; transition: 0.2s; }
+        .reset-btn:hover { background: white; color: black; }
+
+        .svg-wrapper { display: flex; justify-content: center; align-items: center; }
+        svg { width: 100%; height: 100%; overflow: visible; }
+        
+        .wheel-group { transition: transform 1.8s cubic-bezier(0.19, 1, 0.22, 1); transform-origin: 400px 400px; }
+        .segment-bg, .segment-stroke, text { transition: filter 0.9s ease-out, fill 3.7s ease; }
+        
+        .wheel-group.is-selecting .segment-bg:not(.active-item), 
+        .wheel-group.is-selecting .segment-stroke:not(.active-item) { filter: grayscale(60%); }
+        .wheel-group.is-selecting text:not(.active-item) { filter: blur(1px); fill: var(--unselected-text) !important; }
+
+        .active-item { filter: none !important; }
+        text.active-item { fill: #000 !important; filter: blur(0px) !important; }
+        text { font-weight: 700; fill: #000; text-transform: uppercase; pointer-events: none; font-size: 16px; }
+        
+        .selection-pointer { fill: white; filter: drop-shadow(0 0 8px rgba(255,255,255,0.5)); }
+        .ui-label { fill: white; font-weight: 700; text-transform: uppercase; font-size: 20px; letter-spacing: 1px; }
+        .segment-stroke { stroke-width: 20; stroke-linecap: round; fill: none !important; }
+        .wheel-divider { stroke-width: 1.5; opacity: 0.15; stroke: #000; }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div class="sidebar">
+        <div class="console-header">La Machine à Angler</div>
+        <div class="controls-container">
+            <div id="selects-wrapper"></div>
+            <button class="reset-btn" onclick="resetWheels()">Réinitialiser</button>
+        </div>
+        <div class="console-footer">La Machine à Angler (v1.77) © Andrew Robotham, <br> Académie du journalisme et des médias</div>
+    </div>
+    <div class="svg-wrapper">
+        <svg id="master-svg" viewBox="0 0 800 900">
+            <defs id="gradient-defs"></defs>
+            <text x="370" y="878" text-anchor="end" class="ui-label">Mon angle</text>
+            <path d="M 388 885 L 400 858 L 412 885 Z" class="selection-pointer" />
+            <g id="wheels-container"></g>
+        </svg>
+    </div>
+</div>
+
+<script>
+    const defs = document.getElementById('gradient-defs'), container = document.getElementById('wheels-container'), panelWrapper = document.getElementById('selects-wrapper');
+    const centerX = 400, centerY = 400, innerRadiusBase = 140, wheelThickness = 48;
+    const timeouts = [];
+
+    const wheelsData = [
+        { name: "Temporalité", items: ["avant-papier", "Live (T0)", "T1", "T2", "T3", "Affaire", "Original"], fill: "#FFFFFF", stroke: ["#4D798A, #81C56D, #5CB086, #CDC45D", "#81C56D, #5CB086, #CDC45D", "#4D798A, #81C56D, #5CB086, #CDC45D", "#4D798A, #81C56D, #5CB086, #CDC45D", "#E7A85E, #B84040, #CA5771, #9171A1", "#E7A85E, #B84040, #CA5771, #9171A1", "#81C56D, #5CB086, #CDC45D, #E7A85E, #B84040, #CA5771, #9171A1, #4D798A"] },
+        
+        { 
+            name: "Fonction 1", 
+            items: ["Savoir (faits)", "Faire (action)", "Ressentir (émotion)", "Comprendre (contexte)"], 
+            fill: ["#A8E1B9", "#F9E6A8", "#F4B8C1", "#BCC7E8"], 
+            stroke: [
+                "#5CB086, #54C273, #81C56D", 
+                "#E7A85E, #F0C957, #CDC45D", 
+                "#CA5771, #E5556F, #B84040", 
+                "#4D798A, #657BBB, #9171A1"
+            ] 
+        },
+        
+        { name: "Fonction 2", items: ["Mise à jour", "Implication", "Aide", "Connexion", "Inspiration", "Divertissement", "Perspective", "Didactique"], fill: ["#C6E6BC", "#B3DEC8", "#E6E2B3", "#F3D9B9", "#E3B3B3", "#EABCC6", "#D3C6DB", "#B8C8CF"], stroke: ["#81C56D", "#5CB086", "#CDC45D", "#E7A85E", "#B84040", "#CA5771", "#9171A1", "#4D798A"] },
+        
+        { name: "Perspective", items: ["Faits", "Bilan", "Précédents", "Causes", "Conséquences", "Acteurs", "Réactions", "à côtés"], fill: "#FFFFFF", stroke: ["#81C56D, #5CB086, #CDC45D", "#9171A1, #4D798A, #81C56D, #5CB086, #CDC45D", "#9171A1, #4D798A", "#9171A1, #4D798A", "#9171A1, #4D798A, #CDC45D", "#5CB086, #E7A85E, #B84040, #CA5771, #9171A1", "#5CB086, #E7A85E, #B84040, #CA5771, #9171A1, #4D798A", "#5CB086, #E7A85E, #B84040, #CA5771, #9171A1"] },
+        
+        { name: "Format/genre", items: ["Reportage", "Scrollytelling", "Dataviz", "Éclairage", "Compte rendu", "Synthèse", "Sondage", "Enquête", "J’ai testé", "Portrait", "Interview", "Récit", "Etc."], fill: "#FFFFFF", stroke: ["#5CB086, #CDC45D, #E7A85E, #B84040, #CA5771, #9171A1", "#CDC45D, #E7A85E, #B84040, #CA5771, #9171A1, #4D798A", "#81C56D, #5CB086, #CDC45D, #E7A85E, #9171A1, #4D798A", "#9171A1, #4D798A", "#81C56D, #5CB086", "#81C56D, #5CB086, #CDC45D", "#5CB086, #E7A85E", "#81C56D, #5CB086, #CDC45D, #E7A85E, #B84040, #CA5771, #9171A1, #4D798A", "#CDC45D, #E7A85E", "#E7A85E, #B84040, #CA5771", "#81C56D, #5CB086, #CDC45D, #E7A85E, #B84040, #CA5771, #9171A1, #4D798A", "#5CB086, #B84040, #CA5771", "#81C56D, #5CB086, #CDC45D, #E7A85E, #B84040, #CA5771, #9171A1, #4D798A"] },
+        
+        { name: "Dominante", items: ["Pratique", "Politique", "Sociétale", "Sociologique", "Écologique", "Économique", "Philosophique", "Historique", "Intime", "Technologique", "De solution", "Etc."], fill: "#FFFFFF", stroke: ["#5CB086, #CDC45D, #E7A85E", "#81C56D, #5CB086, #CDC45D, #E7A85E, #B84040, #CA5771, #9171A1, #4D798A", "#9171A1, #4D798A, #81C56D, #5CB086", "#9171A1, #4D798A, #81C56D, #5CB086", "#9171A1, #4D798A, #81C56D, #5CB086", "#9171A1, #4D798A, #81C56D, #5CB086", "#B84040, #CA5771, #9171A1, #4D798A", "#B84040, #CA5771, #9171A1, #4D798A", "#5CB086, #E7A85E, #B84040, #CA5771, #9171A1", "#9171A1, #4D798A, #81C56D, #5CB086", "#5CB086, #CDC45D, #E7A85E, #B84040", "#81C56D, #5CB086, #CDC45D, #E7A85E, #B84040, #CA5771, #9171A1, #4D798A"] }
+    ];
+
+    const logicMapping = { "Savoir (faits)": ["Mise à jour", "Implication"], "Faire (action)": ["Aide", "Connexion"], "Ressentir (émotion)": ["Inspiration", "Divertissement"], "Comprendre (contexte)": ["Perspective", "Didactique"] };
+
+    function getSweepGradient(colorStr, id, startA, endA, radius) {
+        if (!colorStr || colorStr === "none") return "none";
+        const colors = colorStr.split(/[;,]/).map(c => c.trim()).filter(c => c.startsWith('#'));
+        if (colors.length < 2) return colors[0];
+        const gradId = `grad-${id}`;
+        if (!document.getElementById(gradId)) {
+            const grad = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
+            grad.id = gradId; grad.setAttribute("gradientUnits", "userSpaceOnUse");
+            const rS = startA * Math.PI / 180, rE = endA * Math.PI / 180;
+            grad.setAttribute("x1", centerX + radius * Math.cos(rS)); grad.setAttribute("y1", centerY + radius * Math.sin(rS));
+            grad.setAttribute("x2", centerX + radius * Math.cos(rE)); grad.setAttribute("y2", centerY + radius * Math.sin(rE));
+            colors.forEach((c, i) => {
+                const stop = document.createElementNS("http://www.w3.org/2000/svg", "stop");
+                stop.setAttribute("offset", `${(i / (colors.length - 1)) * 100}%`);
+                stop.setAttribute("stop-color", c); grad.appendChild(stop);
+            });
+            defs.appendChild(grad);
+        }
+        return `url(#${gradId})`;
+    }
+
+    wheelsData.forEach((w, i) => {
+        const group = document.createElementNS("http://www.w3.org/2000/svg", "g");
+        group.classList.add("wheel-group"); group.id = `wheel-${i}`;
+        const count = w.items.length, angleStep = 360 / count;
+        const outerR = innerRadiusBase + (i + 1) * wheelThickness, innerR = outerR - wheelThickness, midR = innerR + (wheelThickness / 2);
+
+        w.items.forEach((label, j) => {
+            const centerA = 90 - (j * angleStep), sA = centerA - (angleStep / 2), eA = centerA + (angleStep / 2);
+            const rS = sA * Math.PI / 180, rE = eA * Math.PI / 180;
+            const x1 = centerX + innerR * Math.cos(rS), y1 = centerY + innerR * Math.sin(rS);
+            const x2 = centerX + outerR * Math.cos(rS), y2 = centerY + outerR * Math.sin(rS);
+            const x3 = centerX + outerR * Math.cos(rE), y3 = centerY + outerR * Math.sin(rE);
+            const x4 = centerX + innerR * Math.cos(rE), y4 = centerY + innerR * Math.sin(rE);
+            const wedge = `M ${x1},${y1} L ${x2},${y2} A ${outerR},${outerR} 0 0 1 ${x3},${y3} L ${x4},${y4} A ${innerR},${innerR} 0 0 0 ${x1},${y1} Z`;
+            
+            const clip = document.createElementNS("http://www.w3.org/2000/svg", "clipPath");
+            clip.id = `clip-${i}-${j}`; const clipP = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            clipP.setAttribute("d", wedge); clip.appendChild(clipP); defs.appendChild(clip);
+
+            const bg = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            bg.setAttribute("d", wedge); bg.setAttribute("fill", Array.isArray(w.fill) ? w.fill[j] : w.fill);
+            bg.classList.add("segment-bg", `seg-${j}`); group.appendChild(bg);
+
+            const strokeStr = Array.isArray(w.stroke) ? w.stroke[j] : w.stroke;
+            if (strokeStr !== "none") {
+                const b = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                b.setAttribute("d", wedge); b.setAttribute("stroke", getSweepGradient(strokeStr, `s-${i}-${j}`, sA, eA, midR));
+                b.setAttribute("clip-path", `url(#clip-${i}-${j})`); b.classList.add("segment-stroke", `seg-${j}`); group.appendChild(b);
+            }
+
+            const tArc = document.createElementNS("http://www.w3.org/2000/svg", "path");
+            tArc.id = `tp-${i}-${j}`; tArc.setAttribute("d", `M ${centerX + midR * Math.cos(rE)},${centerY + midR * Math.sin(rE)} A ${midR},${midR} 0 0 0 ${centerX + midR * Math.cos(rS)},${centerY + midR * Math.sin(rS)}`);
+            tArc.setAttribute("fill", "none"); group.appendChild(tArc);
+
+            const textEl = document.createElementNS("http://www.w3.org/2000/svg", "text"); textEl.classList.add(`txt-${j}`);
+            const tp = document.createElementNS("http://www.w3.org/2000/svg", "textPath");
+            tp.setAttribute("href", `#tp-${i}-${j}`); tp.setAttribute("startOffset", "50%"); tp.setAttribute("text-anchor", "middle"); tp.setAttribute("dominant-baseline", "central");
+            tp.textContent = label; textEl.appendChild(tp); group.appendChild(textEl);
+
+            const l = document.createElementNS("http://www.w3.org/2000/svg", "line");
+            l.setAttribute("x1", x1); l.setAttribute("y1", y1); l.setAttribute("x2", x2); l.setAttribute("y2", y2);
+            l.classList.add("wheel-divider"); group.appendChild(l);
+        });
+        container.appendChild(group);
+
+        const gDiv = document.createElement("div"); gDiv.className = "control-group";
+        const lbl = document.createElement("label"); lbl.className = "control-label"; lbl.textContent = w.name; gDiv.appendChild(lbl);
+        const sel = document.createElement("select"); sel.id = `sel-${i}`;
+        sel.innerHTML = `<option value="" disabled selected>Sélectionner</option>` + w.items.map((it, idx) => `<option value="${idx}">${it}</option>`).join('');
+        sel.onchange = (e) => rotateWheel(i, parseInt(e.target.value), true);
+        gDiv.appendChild(sel); panelWrapper.appendChild(gDiv);
+    });
+
+    function rotateWheel(wIdx, itemIdx, runLogic) {
+        const group = document.getElementById(`wheel-${wIdx}`);
+        group.classList.remove('is-selecting'); if (timeouts[wIdx]) clearTimeout(timeouts[wIdx]);
+        group.style.transform = `rotate(${itemIdx * (360 / wheelsData[wIdx].items.length)}deg)`;
+        document.getElementById(`sel-${wIdx}`).value = itemIdx;
+        group.querySelectorAll('.active-item').forEach(el => el.classList.remove('active-item'));
+        group.querySelectorAll(`.seg-${itemIdx}, .txt-${itemIdx}`).forEach(el => el.classList.add('active-item'));
+        timeouts[wIdx] = setTimeout(() => group.classList.add('is-selecting'), 1800);
+
+        if (!runLogic) return;
+        if (wIdx === 1) {
+            const allowed = logicMapping[wheelsData[1].items[itemIdx]];
+            const s2 = document.getElementById('sel-2');
+            s2.innerHTML = `<option value="" disabled selected>Sélectionner</option><option value="reset" style="color:red; font-weight:bold;">--- RESET ---</option>` +
+                wheelsData[2].items.map((it, idx) => `<option value="${idx}" ${allowed.includes(it) ? '' : 'disabled hidden'}>${it}</option>`).join('');
+        } else if (wIdx === 2) {
+            const val = document.getElementById('sel-2').value;
+            if (val === "reset") return resetWheels();
+            for (let parent in logicMapping) if (logicMapping[parent].includes(wheelsData[2].items[itemIdx])) { rotateWheel(1, wheelsData[1].items.indexOf(parent), false); break; }
+        }
+    }
+
+    function resetWheels() {
+        wheelsData.forEach((w, i) => {
+            const group = document.getElementById(`wheel-${i}`);
+            group.style.transform = `rotate(0deg)`; group.classList.remove('is-selecting');
+            document.getElementById(`sel-${i}`).selectedIndex = 0;
+            group.querySelectorAll('.active-item').forEach(el => el.classList.remove('active-item'));
+            if (i === 2) document.getElementById('sel-2').innerHTML = `<option value="" disabled selected>Sélectionner</option>` + wheelsData[2].items.map((it, idx) => `<option value="${idx}">${it}</option>`).join('');
+        });
+    }
+</script>
+</body>
+</html>

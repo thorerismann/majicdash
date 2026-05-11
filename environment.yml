@@ -1,0 +1,12 @@
+name: majicdash
+channels:
+  - conda-forge
+dependencies:
+  - python=3.12
+  - pip
+  - pip:
+      - streamlit
+      - textstat
+      - langdetect
+      - vaderSentiment
+      - vaderSentiment-fr
