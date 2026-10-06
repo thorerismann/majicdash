@@ -10,3 +10,4 @@ dependencies:
       - langdetect
       - vaderSentiment
       - vaderSentiment-fr
+      - spacy

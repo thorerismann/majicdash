@@ -10,12 +10,14 @@ import streamlit.components.v1 as components
 import textstat
 from langdetect import DetectorFactory, LangDetectException, detect
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from modules.pos_highlighting import highlight_parts_of_speech, part_of_speech_counts
 
 
 DetectorFactory.seed = 0
 
 APP_TITLE = "Writer Dashboard"
 ANGLE_MACHINE_PATH = Path(__file__).resolve().parents[1] / "assets" / "code_machine_angle.html"
+POS_MODEL = "en_core_web_sm"
 DEFAULT_TEXT = """Paste a student paragraph, memo, or draft here to analyze clarity, tone, and sentence flow.
 
 This first version is English-first and local-only. It does not require any AI key."""
@@ -357,6 +359,40 @@ def render_metric_cards(metrics: dict[str, float | int | str], score: int, band:
     col7.metric("Avg Sentence", f"{float(metrics['avg_sentence_length']):.1f} words")
 
 
+def render_pos_highlighter(text: str) -> None:
+    st.subheader("Parts of Speech")
+    st.write("Select one or more word classes to highlight every matching word in your submitted text.")
+    pos_options = (("Verb", "VERB"), ("Noun", "NOUN"), ("Adverb", "ADV"), ("Adjective", "ADJ"))
+    toggle_columns = st.columns(4)
+    selected_pos = {
+        pos
+        for column, (label, pos) in zip(toggle_columns, pos_options)
+        if column.checkbox(label, value=label == "Verb", key=f"en_pos_{pos}")
+    }
+
+    try:
+        counts = part_of_speech_counts(text, POS_MODEL)
+        highlighted_html, highlighted_counts = highlight_parts_of_speech(text, POS_MODEL, selected_pos)
+    except RuntimeError:
+        st.error("spaCy is not installed. Run `pip install -r requirements.txt` and restart the app.")
+        return
+    except OSError:
+        st.error("The English language model is not installed. Run `python -m spacy download en_core_web_sm` and restart the app.")
+        return
+
+    highlighted_total = sum(highlighted_counts.values())
+    selected_labels = [label.lower() for label, pos in pos_options if pos in selected_pos]
+    selection_summary = ", ".join(selected_labels) if selected_labels else "no word classes"
+    st.caption(
+        f"{highlighted_total} words highlighted ({selection_summary}). "
+        f"Verbs: {counts['VERB']} · Nouns: {counts['NOUN']} · Adverbs: {counts['ADV']} · Adjectives: {counts['ADJ']}"
+    )
+    st.markdown(
+        f'<div style="line-height: 1.8; padding: 1rem; border: 1px solid #d1d5db; border-radius: 0.5rem; white-space: pre-wrap;">{highlighted_html}</div>',
+        unsafe_allow_html=True,
+    )
+
+
 def main() -> None:
     st.set_page_config(page_title=APP_TITLE, page_icon="📝", layout="wide")
 
@@ -376,7 +412,10 @@ def main() -> None:
     text = st.text_area("Paste writing to analyze", value=DEFAULT_TEXT, height=320, placeholder="Paste up to a few pages of writing here.")
     analyze = st.button("Analyze Writing", type="primary", use_container_width=True)
 
-    if not analyze:
+    if analyze:
+        st.session_state["en_analysis_requested"] = True
+
+    if not st.session_state.get("en_analysis_requested", False):
         st.info("Paste text, then click `Analyze Writing`.")
         return
 
@@ -403,8 +442,8 @@ def main() -> None:
 
     render_metric_cards(metrics, score, band)
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-        ["Basic Stats", "Style", "Sentiment", "AI Critique", "Angle Machine", "Writing Diagnostics"]
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
+        ["Basic Stats", "Style", "Sentiment", "Parts of Speech", "AI Critique", "Angle Machine", "Writing Diagnostics"]
     )
 
     with tab1:
@@ -473,6 +512,9 @@ def main() -> None:
         )
 
     with tab4:
+        render_pos_highlighter(text)
+
+    with tab5:
         st.subheader("Use External AI Without Sharing Your Key")
         st.write(
             "This app does not call an external model. If you want richer critique, copy the prompt below into an AI tool of your choice."
@@ -491,7 +533,7 @@ def main() -> None:
         st.markdown("**Useful links**")
         render_tool_links()
 
-    with tab5:
+    with tab6:
         st.subheader("La Machine a Angler")
         st.write(
             "This is embedded from the standalone HTML tool so you can use it inside the dashboard without rewriting the interaction logic."
@@ -535,7 +577,7 @@ def main() -> None:
             "Best fit: treat this as a planning companion for journalism/story framing, separate from the writing-quality analysis above."
         )
 
-    with tab6:
+    with tab7:
         st.subheader("Writing Diagnostics")
         st.write(
             "These are extra revision checks. They are not separate apps or AI tools, just local signals that help you inspect structure, wording, and tone."

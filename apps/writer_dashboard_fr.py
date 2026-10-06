@@ -10,6 +10,7 @@ import streamlit.components.v1 as components
 import textstat
 from langdetect import DetectorFactory, LangDetectException, detect
 from vaderSentiment_fr.vaderSentiment import SentimentIntensityAnalyzer
+from modules.pos_highlighting import highlight_parts_of_speech, part_of_speech_counts
 
 # Set textstat to French
 textstat.set_lang("fr")
@@ -18,6 +19,7 @@ DetectorFactory.seed = 0
 
 APP_TITLE = "Tableau de Bord de l'Écrivain"
 ANGLE_MACHINE_PATH = Path(__file__).resolve().parents[1] / "assets" / "code_machine_angle.html"
+POS_MODEL = "fr_core_news_sm"
 DEFAULT_TEXT = """Collez ici un paragraphe d'élève, un mémo ou un brouillon pour analyser la clarté, le ton et la fluidité des phrases.
 
 Cette première version est axée sur le français et fonctionne localement. Elle ne nécessite aucune clé d'IA."""
@@ -225,6 +227,40 @@ def render_metric_cards(metrics: dict[str, float | int | str], score: int, band:
     col6.metric("Facilité de lecture", f"{float(metrics['reading_ease']):.1f}")
     col7.metric("Phrase Moyenne", f"{float(metrics['avg_sentence_length']):.1f} mots")
 
+
+def render_pos_highlighter(text: str) -> None:
+    st.subheader("Classes grammaticales")
+    st.write("Sélectionnez une ou plusieurs classes de mots pour surligner toutes leurs occurrences dans le texte soumis.")
+    pos_options = (("Verbes", "VERB"), ("Noms", "NOUN"), ("Adverbes", "ADV"), ("Adjectifs", "ADJ"))
+    toggle_columns = st.columns(4)
+    selected_pos = {
+        pos
+        for column, (label, pos) in zip(toggle_columns, pos_options)
+        if column.checkbox(label, value=label == "Verbes", key=f"fr_pos_{pos}")
+    }
+
+    try:
+        counts = part_of_speech_counts(text, POS_MODEL)
+        highlighted_html, highlighted_counts = highlight_parts_of_speech(text, POS_MODEL, selected_pos)
+    except RuntimeError:
+        st.error("spaCy n'est pas installé. Exécutez `pip install -r requirements.txt`, puis redémarrez l'application.")
+        return
+    except OSError:
+        st.error("Le modèle français n'est pas installé. Exécutez `python -m spacy download fr_core_news_sm`, puis redémarrez l'application.")
+        return
+
+    highlighted_total = sum(highlighted_counts.values())
+    selected_labels = [label.lower() for label, pos in pos_options if pos in selected_pos]
+    selection_summary = ", ".join(selected_labels) if selected_labels else "aucune classe de mots"
+    st.caption(
+        f"{highlighted_total} mots surlignés ({selection_summary}). "
+        f"Verbes : {counts['VERB']} · Noms : {counts['NOUN']} · Adverbes : {counts['ADV']} · Adjectifs : {counts['ADJ']}"
+    )
+    st.markdown(
+        f'<div style="line-height: 1.8; padding: 1rem; border: 1px solid #d1d5db; border-radius: 0.5rem; white-space: pre-wrap;">{highlighted_html}</div>',
+        unsafe_allow_html=True,
+    )
+
 def main() -> None:
     st.set_page_config(page_title=APP_TITLE, page_icon="📝", layout="wide")
 
@@ -246,7 +282,10 @@ def main() -> None:
     text = st.text_area("Collez le texte à analyser", value=DEFAULT_TEXT, height=320, placeholder="Collez jusqu'à quelques pages de texte ici.")
     analyze = st.button("Analyser le Texte", type="primary", use_container_width=True)
 
-    if not analyze:
+    if analyze:
+        st.session_state["fr_analysis_requested"] = True
+
+    if not st.session_state.get("fr_analysis_requested", False):
         st.info("Collez du texte, puis cliquez sur `Analyser le Texte`.")
         return
 
@@ -272,8 +311,8 @@ def main() -> None:
 
     render_metric_cards(metrics, score, band)
 
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(
-        ["Statistiques de base", "Style", "Sentiment", "Critique IA", "La Machine à Angler"]
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
+        ["Statistiques de base", "Style", "Sentiment", "Classes grammaticales", "Critique IA", "La Machine à Angler"]
     )
 
     with tab1:
@@ -342,6 +381,9 @@ def main() -> None:
         )
 
     with tab4:
+        render_pos_highlighter(text)
+
+    with tab5:
         st.subheader("Utiliser une IA externe sans partager votre clé")
         st.write(
             "Cette application n'appelle pas de modèle externe. Si vous souhaitez une critique plus riche, copiez le prompt ci-dessous dans un outil d'IA de votre choix."
@@ -358,7 +400,7 @@ def main() -> None:
             use_container_width=True,
         )
 
-    with tab5:
+    with tab6:
         st.subheader("La Machine à Angler")
         st.write(
             "Ceci est intégré depuis l'outil HTML autonome, afin que vous puissiez l'utiliser à l'intérieur du tableau de bord sans réécrire la logique d'interaction."

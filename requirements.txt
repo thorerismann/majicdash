@@ -3,3 +3,4 @@ textstat
 langdetect
 vaderSentiment
 vaderSentiment-fr
+spacy
