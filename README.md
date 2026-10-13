@@ -51,6 +51,10 @@ streamlit run apps/writer_dashboard_en.py
 streamlit run apps/writer_dashboard_fr.py
 ```
 
+## Journalistic Angle Analysis
+
+The English and French dashboards include a tab that sends the submitted text and an editable prompt to the CSCS inference API. Set `CSCS_INFERENCE_API_KEY` in the ignored project `.env` file (see `.env.example`), or provide it through the process environment or Streamlit secrets. The API key is never shown in the interface. The request uses the `swiss-ai/Apertus-8B-Instruct-2509` model.
+
 ## Notes
 
 - The English and French apps both use the same HTML asset in `assets/`.

@@ -11,6 +11,7 @@ import textstat
 from langdetect import DetectorFactory, LangDetectException, detect
 from vaderSentiment_fr.vaderSentiment import SentimentIntensityAnalyzer
 from modules.pos_highlighting import highlight_parts_of_speech, part_of_speech_counts
+from modules.inference import request_angle_analysis
 
 # Set textstat to French
 textstat.set_lang("fr")
@@ -311,8 +312,8 @@ def main() -> None:
 
     render_metric_cards(metrics, score, band)
 
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(
-        ["Statistiques de base", "Style", "Sentiment", "Classes grammaticales", "Critique IA", "La Machine à Angler"]
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
+        ["Statistiques de base", "Style", "Sentiment", "Classes grammaticales", "Critique IA", "La Machine à Angler", "Angle journalistique"]
     )
 
     with tab1:
@@ -386,7 +387,7 @@ def main() -> None:
     with tab5:
         st.subheader("Utiliser une IA externe sans partager votre clé")
         st.write(
-            "Cette application n'appelle pas de modèle externe. Si vous souhaitez une critique plus riche, copiez le prompt ci-dessous dans un outil d'IA de votre choix."
+            "Pour une critique plus riche, copiez le prompt ci-dessous dans un outil d'IA de votre choix. L'onglet « Angle journalistique » peut aussi envoyer le texte à l'API CSCS configurée."
         )
         st.info(
             "Je n'ai pas intégré de détecteur automatique de paternité par IA. Les meilleures options d'API sont payantes ou limitées à l'anglais, et je ne leur ferais pas assez confiance pour rendre cette partie décisive dans l'évaluation des étudiants."
@@ -414,6 +415,29 @@ def main() -> None:
         st.caption(
             "Conseil : considérez ceci comme un compagnon de planification pour la structuration journalistique/narrative, distinct de l'analyse de qualité d'écriture ci-dessus."
         )
+
+    with tab7:
+        st.subheader("Analyse d'angle journalistique")
+        st.session_state.setdefault(
+            "fr_angle_prompt",
+            "Analysez le texte pour en dégager un angle journalistique simple. Identifiez la valeur d'actualité centrale, la perspective la plus intéressante, les personnes concernées et un angle concis à explorer. Soyez précis et appuyez-vous uniquement sur le texte fourni ; signalez les informations importantes qui manquent.",
+        )
+        angle_prompt = st.text_area(
+            "Consigne de la demande",
+            height=130,
+            key="fr_angle_prompt",
+        )
+        if st.button("Générer l'analyse d'angle", type="primary", key="fr_generate_angle"):
+            if not text.strip():
+                st.warning("Collez du texte avant de demander une analyse.")
+            else:
+                try:
+                    with st.spinner("Analyse en cours..."):
+                        st.session_state["fr_angle_result"] = request_angle_analysis(text, angle_prompt)
+                except RuntimeError as exc:
+                    st.error(str(exc))
+        st.session_state.setdefault("fr_angle_result", "")
+        st.text_area("Analyse (modifiable)", height=280, key="fr_angle_result")
 
 if __name__ == "__main__":
     main()

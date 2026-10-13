@@ -11,6 +11,7 @@ import textstat
 from langdetect import DetectorFactory, LangDetectException, detect
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from modules.pos_highlighting import highlight_parts_of_speech, part_of_speech_counts
+from modules.inference import request_angle_analysis
 
 
 DetectorFactory.seed = 0
@@ -442,8 +443,8 @@ def main() -> None:
 
     render_metric_cards(metrics, score, band)
 
-    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(
-        ["Basic Stats", "Style", "Sentiment", "Parts of Speech", "AI Critique", "Angle Machine", "Writing Diagnostics"]
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs(
+        ["Basic Stats", "Style", "Sentiment", "Parts of Speech", "AI Critique", "Angle Machine", "Writing Diagnostics", "Journalistic Angle"]
     )
 
     with tab1:
@@ -607,6 +608,29 @@ def main() -> None:
         if extra_tools["paragraph_lengths"]:
             st.markdown("**Paragraph sizes**")
             st.write(", ".join(f"{count} words" for count in extra_tools["paragraph_lengths"]))
+
+    with tab8:
+        st.subheader("Journalistic Angle Analysis")
+        st.session_state.setdefault(
+            "en_angle_prompt",
+            "Analyze the text for a simple journalistic angle. Identify the central news value, the most compelling perspective, who is affected, and one concise angle to pursue. Be specific and grounded only in the supplied text; note important missing information.",
+        )
+        angle_prompt = st.text_area(
+            "Request prompt",
+            height=130,
+            key="en_angle_prompt",
+        )
+        if st.button("Generate angle analysis", type="primary", key="en_generate_angle"):
+            if not text.strip():
+                st.warning("Paste some text before requesting an analysis.")
+            else:
+                try:
+                    with st.spinner("Requesting analysis..."):
+                        st.session_state["en_angle_result"] = request_angle_analysis(text, angle_prompt)
+                except RuntimeError as exc:
+                    st.error(str(exc))
+        st.session_state.setdefault("en_angle_result", "")
+        st.text_area("Analysis (editable)", height=280, key="en_angle_result")
 
 
 if __name__ == "__main__":
