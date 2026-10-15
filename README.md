@@ -4,20 +4,21 @@ This folder is a self-contained package of the Streamlit app, prepared so you ca
 
 ## Included
 
-- `apps/writer_dashboard_en.py`: English Streamlit app
-- `apps/writer_dashboard_fr.py`: French Streamlit app
-- `assets/code_machine_angle.html`: shared angle-machine HTML asset
-- `requirements.txt`: pip dependencies for both app variants
+- `apps/writer_dashboard.py`: English interface with English and French text analysis
+- `apps/modules/pos_highlighting.py`: POS model selection, tagging, counts, highlighting, and tab rendering
+- `apps/modules/sentiment_analysis.py`: English/French VADER scoring, sentence analysis, CSV export, and sentiment tab rendering
+- `apps/modules/style_analysis.py`: English/French style rules, repetition checks, sentence flags, and Style tab rendering
+- `apps/modules/text_utils.py`: shared sentence splitting and Unicode word tokenization
+- `assets/code_machine_angle.html`: angle-machine HTML asset
+- `requirements.txt`: pip dependencies for the app
 - `environment.yml`: optional Conda environment
-- `.vscode/launch.json`: VS Code run/debug profiles for both apps
-- `.vscode/extensions.json`: recommended VS Code Python extensions
 
 ## Open In VS Code
 
 1. Open this `majicdash` folder as the workspace root.
 2. Create a virtual environment, or use the provided Conda file.
 3. Install dependencies from `requirements.txt`.
-4. Run either launch profile from the VS Code Run and Debug panel.
+4. Run `python -m streamlit run apps/writer_dashboard.py` in the integrated terminal.
 
 ## Pip Setup
 
@@ -25,7 +26,7 @@ This folder is a self-contained package of the Streamlit app, prepared so you ca
 python -m venv .venv
 source .venv/bin/activate
 python -m pip install --upgrade pip
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 ## Conda Setup
@@ -35,29 +36,43 @@ mamba env create -f environment.yml
 conda activate majicdash
 ```
 
-## spaCy Language Models
+## spaCy Language Model
 
-The part-of-speech highlighter needs a language model for each dashboard you plan to use:
+The English and French models (`en_core_web_md` and `fr_core_news_md` 3.8.0) are included in both setup files, alongside compatible spaCy 3.8.x and both sentiment libraries. Pip installs the models as regular Python packages; Mamba installs them through the `pip` section of `environment.yml`. No separate model download is needed.
+
+The sidebar's **Text language** setting defaults to auto-detection, with English and French overrides for short or ambiguous text. This selects the matching grammar model, sentiment analyzer, readability language, stopwords, and diagnostic vocabulary. Flesch-Kincaid grade and passive-voice flags are available for English only; French shows N/A for these measures. Style and executive-presence scores remain rough heuristics.
+
+To update the existing `majic2` environment:
 
 ```bash
-python -m spacy download en_core_web_sm
-python -m spacy download fr_core_news_sm
+conda activate majic2
+python -m pip install -r requirements.txt
 ```
+
+Alternatively, run `mamba env update -n majic2 -f environment.yml`. Restart Streamlit after installing dependencies. The model powers the existing **Parts of Speech** tab.
+
+The POS module uses the medium (`md`) models. Its Verb category includes both `VERB` and `AUX` tags. Apostrophes are normalized for analysis while the original spelling, punctuation, and spacing are preserved in the display. Counts and highlights come from the same model pass.
 
 ## Run Without VS Code
 
 ```bash
-streamlit run apps/writer_dashboard_en.py
-streamlit run apps/writer_dashboard_fr.py
+python -m streamlit run apps/writer_dashboard.py
 ```
 
 ## Journalistic Angle Analysis
 
-The English and French dashboards include a tab that sends the submitted text and an editable prompt to the CSCS inference API. Set `CSCS_INFERENCE_API_KEY` in the ignored project `.env` file (see `.env.example`), or provide it through the process environment or Streamlit secrets. The API key is never shown in the interface. The request uses the `swiss-ai/Apertus-8B-Instruct-2509` model.
+The dashboard includes a tab that sends the submitted text and an editable prompt to the CSCS inference API. Set `CSCS_INFERENCE_API_KEY` in the ignored project `.env` file (see `.env.example`), or provide it through the process environment or Streamlit secrets. The API key is never shown in the interface. The request uses the `swiss-ai/Apertus-8B-Instruct-2509` model.
+
+## Sentiment Analysis
+
+VADER scores emotional wording with a dictionary and rules. The Sentiment tab shows a document compound score (−1 to +1), positive/neutral/negative proportions, and separate sentence scores. Proportions are not confidence probabilities. Labels now use the documented ±0.05 thresholds instead of the previous custom ±0.35 thresholds; raw compound scores retain their meaning.
+
+The sentence chart, category counts, and strongest positive/negative passages help expose changes hidden by a document average. The mean sentence compound gives each sentence equal weight and is not the document compound. All sentence scores can be downloaded as CSV. Sentence boundaries use spaCy's language-specific tokenizer and a rule-based sentencizer, so unusual punctuation may still need review.
+
+French text uses `vaderSentiment-fr`; English uses `vaderSentiment`. VADER does not determine author intent, objectivity, factual accuracy, or writing quality. Review quotations, sarcasm, and domain-specific wording in context. See the [VADER scoring documentation](https://github.com/cjhutto/vaderSentiment#about-the-scoring) and [French adaptation](https://github.com/thomas7lieues/vader_FR).
 
 ## Notes
 
-- The English and French apps both use the same HTML asset in `assets/`.
-- The French app requires `vaderSentiment-fr`, which is already included in the bundled dependency files.
-- The part-of-speech highlighting tabs use spaCy. Install the matching English and French language models with the commands above before running the apps.
+- The app uses the angle-machine HTML asset in `assets/`.
+- The part-of-speech highlighting tab uses spaCy and the matching language model installed during setup.
 - The original source files outside this folder are not needed for the bundle to run.
