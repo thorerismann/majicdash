@@ -2,26 +2,27 @@ from __future__ import annotations
 
 import math
 import re
-from collections import Counter
 from pathlib import Path
 
 import streamlit as st
 import streamlit.components.v1 as components
-import textstat
+from textstat.textstat import textstatistics
 from langdetect import DetectorFactory, LangDetectException, detect
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-from modules.pos_highlighting import highlight_parts_of_speech, part_of_speech_counts
+from modules.pos_highlighting import render_pos_highlighter
 from modules.inference import request_angle_analysis
+from modules.sentiment_analysis import analyze_sentiment, render_sentiment
+from modules.style_analysis import analyze_style, render_style
+from modules.text_utils import split_sentences, tokenize_words
 
 
 DetectorFactory.seed = 0
 
 APP_TITLE = "Writer Dashboard"
 ANGLE_MACHINE_PATH = Path(__file__).resolve().parents[1] / "assets" / "code_machine_angle.html"
-POS_MODEL = "en_core_web_sm"
+LANGUAGES = {"en": "English", "fr": "French"}
 DEFAULT_TEXT = """Paste a student paragraph, memo, or draft here to analyze clarity, tone, and sentence flow.
 
-This first version is English-first and local-only. It does not require any AI key."""
+English and French texts are supported. Local writing analysis does not require an AI key."""
 ANGLE_WHEELS: list[tuple[str, list[str]]] = [
     ("Temporalite", ["avant-papier", "Live (T0)", "T1", "T2", "T3", "Affaire", "Original"]),
     ("Fonction 1", ["Savoir (faits)", "Faire (action)", "Ressentir (emotion)", "Comprendre (contexte)"]),
@@ -75,53 +76,26 @@ TOOL_LINKS = [
     ("Claude", "https://claude.ai", "Optional external AI critique"),
     ("Gemini", "https://gemini.google.com", "Optional external AI critique"),
 ]
-STOPWORDS = {
-    "a",
-    "an",
-    "and",
-    "are",
-    "as",
-    "at",
-    "be",
-    "by",
-    "for",
-    "from",
-    "has",
-    "he",
-    "in",
-    "is",
-    "it",
-    "its",
-    "of",
-    "on",
-    "that",
-    "the",
-    "to",
-    "was",
-    "were",
-    "will",
-    "with",
+FRENCH_TRANSITIONS = {
+    "cependant", "pourtant", "donc", "ainsi", "en outre", "de plus", "néanmoins",
+    "parce que", "d'abord", "ensuite", "enfin", "par exemple", "en revanche", "par conséquent",
+}
+FRENCH_HEDGES = {
+    "peut-être", "probablement", "possiblement", "apparemment", "semble", "semblent",
+    "plutôt", "éventuellement", "quelque peu",
 }
 
 
-def split_sentences(text: str) -> list[str]:
-    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
-    return [sentence.strip() for sentence in sentences if sentence.strip()]
-
-
-def tokenize_words(text: str) -> list[str]:
-    return re.findall(r"[A-Za-z][A-Za-z'-]*", text.lower())
+def select_analysis_language(detected: str, choice: str) -> str | None:
+    if choice == "Auto-detect":
+        return detected if detected in LANGUAGES else None
+    return {"English": "en", "French": "fr"}[choice]
 
 
 def normalize_score(value: float, low: float, high: float) -> float:
     if high <= low:
         return 0.0
     return max(0.0, min(1.0, (value - low) / (high - low)))
-
-
-@st.cache_resource
-def get_sentiment_analyzer() -> SentimentIntensityAnalyzer:
-    return SentimentIntensityAnalyzer()
 
 
 @st.cache_data(show_spinner=False)
@@ -133,12 +107,15 @@ def detect_language(text: str) -> str:
 
 
 @st.cache_data(show_spinner=False)
-def analyze_basic_metrics(text: str) -> dict[str, float | int | str]:
+def analyze_basic_metrics(text: str, language_code: str = "en") -> dict[str, float | int | str | None]:
+    # Each analysis has its own language setting, including concurrent sessions.
+    stats = textstatistics()
+    stats.set_lang(language_code)
     words = tokenize_words(text)
     sentences = split_sentences(text)
-    word_count = textstat.lexicon_count(text, removepunct=True)
-    sentence_count = max(1, textstat.sentence_count(text))
-    syllable_count = textstat.syllable_count(text)
+    word_count = len(words)
+    sentence_count = len(sentences)
+    syllable_count = stats.syllable_count(text)
     char_count = len(text)
     avg_sentence_length = len(words) / max(1, len(sentences))
     reading_minutes = len(words) / 200 if words else 0.0
@@ -150,95 +127,28 @@ def analyze_basic_metrics(text: str) -> dict[str, float | int | str]:
         "char_count": char_count,
         "avg_sentence_length": avg_sentence_length,
         "reading_minutes": reading_minutes,
-        "fk_grade": textstat.flesch_kincaid_grade(text) if text.strip() else 0.0,
-        "reading_ease": textstat.flesch_reading_ease(text) if text.strip() else 0.0,
+        "fk_grade": (stats.flesch_kincaid_grade(text) if text.strip() else 0.0) if language_code == "en" else None,
+        "reading_ease": stats.flesch_reading_ease(text) if text.strip() else 0.0,
+        "language_code": language_code,
     }
 
 
 @st.cache_data(show_spinner=False)
-def analyze_sentiment(text: str) -> dict[str, float | str]:
-    scores = get_sentiment_analyzer().polarity_scores(text)
-    compound = scores["compound"]
-    if compound >= 0.35:
-        label = "Positive / encouraging"
-    elif compound <= -0.35:
-        label = "Negative / critical"
-    else:
-        label = "Neutral / measured"
-
-    return {
-        "compound": compound,
-        "positive": scores["pos"],
-        "neutral": scores["neu"],
-        "negative": scores["neg"],
-        "label": label,
-    }
-
-
-@st.cache_data(show_spinner=False)
-def analyze_style(text: str) -> dict[str, object]:
-    words = tokenize_words(text)
-    sentences = split_sentences(text)
-    lowered = [word for word in words if word not in STOPWORDS and len(word) > 3]
-    frequencies = Counter(lowered)
-    repeated_terms = [(word, count) for word, count in frequencies.most_common(8) if count > 2]
-
-    long_sentences = [sentence for sentence in sentences if len(tokenize_words(sentence)) >= 28]
-    short_sentences = [sentence for sentence in sentences if len(tokenize_words(sentence)) <= 5]
-    exclamation_count = text.count("!")
-    question_count = text.count("?")
-
-    strengths: list[str] = []
-    improvements: list[str] = []
-
-    avg_sentence_length = len(words) / max(1, len(sentences))
-    if 12 <= avg_sentence_length <= 22:
-        strengths.append("Sentence length is generally in a readable range.")
-    else:
-        improvements.append("Sentence length is uneven; aim for a steadier rhythm across paragraphs.")
-
-    if len(long_sentences) == 0:
-        strengths.append("No overloaded long sentences were detected.")
-    else:
-        improvements.append("A few sentences are long enough to risk losing the reader.")
-
-    if repeated_terms:
-        repeated_labels = ", ".join(f"{word} ({count})" for word, count in repeated_terms[:5])
-        improvements.append(f"Some words are repeated often: {repeated_labels}.")
-    else:
-        strengths.append("Word repetition is limited, which helps the draft feel less redundant.")
-
-    if exclamation_count == 0 and question_count <= 2:
-        strengths.append("Punctuation use reads as controlled rather than overly dramatic.")
-    else:
-        improvements.append("Punctuation may be adding extra intensity; review exclamation marks and rhetorical questions.")
-
-    if short_sentences:
-        improvements.append("Very short sentences appear in the draft; make sure they are intentional for emphasis.")
-
-    return {
-        "strengths": strengths[:3],
-        "improvements": improvements[:4],
-        "repeated_terms": repeated_terms[:8],
-        "long_sentences": long_sentences[:5],
-        "short_sentences": short_sentences[:5],
-    }
-
-
-@st.cache_data(show_spinner=False)
-def analyze_additional_tools(text: str) -> dict[str, object]:
+def analyze_additional_tools(text: str, language_code: str = "en") -> dict[str, object]:
     words = tokenize_words(text)
     sentences = split_sentences(text)
     paragraphs = [paragraph.strip() for paragraph in re.split(r"\n\s*\n", text) if paragraph.strip()]
     unique_words = len(set(words))
     lexical_diversity = unique_words / len(words) if words else 0.0
     passive_hits = re.findall(r"\b(?:is|are|was|were|be|been|being)\s+\w+(?:ed|en)\b", text.lower())
-    hedge_hits = [word for word in words if word in HEDGING_WORDS]
+    hedges = FRENCH_HEDGES if language_code == "fr" else HEDGING_WORDS
+    transitions = FRENCH_TRANSITIONS if language_code == "fr" else TRANSITION_WORDS
+    lowered_text = text.lower().replace("’", "'")
+    hedge_count = sum(len(re.findall(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", lowered_text)) for phrase in hedges)
 
     transition_hits: list[str] = []
-    lowered_text = text.lower()
-    for phrase in sorted(TRANSITION_WORDS):
-        if phrase in lowered_text:
+    for phrase in sorted(transitions):
+        if re.search(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", lowered_text):
             transition_hits.append(phrase)
 
     paragraph_lengths = [len(tokenize_words(paragraph)) for paragraph in paragraphs]
@@ -248,8 +158,8 @@ def analyze_additional_tools(text: str) -> dict[str, object]:
         "paragraph_count": len(paragraphs) if paragraphs else (1 if text.strip() else 0),
         "lexical_diversity": lexical_diversity,
         "unique_words": unique_words,
-        "passive_count": len(passive_hits),
-        "hedge_count": len(hedge_hits),
+        "passive_count": len(passive_hits) if language_code == "en" else None,
+        "hedge_count": hedge_count,
         "transition_hits": transition_hits[:8],
         "longest_paragraph": longest_paragraph,
         "paragraph_lengths": paragraph_lengths[:6],
@@ -257,17 +167,19 @@ def analyze_additional_tools(text: str) -> dict[str, object]:
 
 
 @st.cache_data(show_spinner=False)
-def build_summary(text: str, metrics: dict[str, float | int | str], sentiment: dict[str, float | str]) -> list[str]:
+def build_summary(text: str, metrics: dict[str, float | int | str | None], sentiment: dict[str, float | str]) -> list[str]:
     words = int(metrics["word_count"])
     sentences = int(metrics["sentence_count"])
     avg_sentence = float(metrics["avg_sentence_length"])
-    grade = float(metrics["fk_grade"])
+    grade = metrics["fk_grade"]
     sentiment_label = str(sentiment["label"])
 
     summary = [
         f"This draft is about {words} words across {sentences} sentences, which makes it a compact piece for classroom review.",
-        f"The readability estimate is around grade {grade:.1f}, with an average sentence length of {avg_sentence:.1f} words.",
-        f"The overall tone reads as {sentiment_label.lower()}, based on a local sentiment model rather than an external AI evaluation.",
+        (f"The readability estimate is around grade {grade:.1f}, with an average sentence length of {avg_sentence:.1f} words."
+         if grade is not None else
+         f"French reading ease is {float(metrics['reading_ease']):.1f}, with an average sentence length of {avg_sentence:.1f} words."),
+        f"VADER classifies the document’s emotional wording as {sentiment_label.lower()}; this is not a judgment of writing quality or author intent.",
     ]
     return summary
 
@@ -300,7 +212,7 @@ def build_ai_prompt(text: str, language_code: str) -> str:
     return f"""You are helping a student improve a piece of writing.
 
 Language of input: {language_code}
-Expected response language: English
+Expected response language: {LANGUAGES.get(language_code, 'English')}
 
 Please analyze the writing below and return:
 1. A 3-sentence executive summary.
@@ -355,43 +267,9 @@ def render_metric_cards(metrics: dict[str, float | int | str], score: int, band:
     col4.metric("Exec Presence", f"{score}/100", band)
 
     col5, col6, col7 = st.columns(3)
-    col5.metric("F-K Grade", f"{float(metrics['fk_grade']):.1f}")
+    col5.metric("F-K Grade", f"{float(metrics['fk_grade']):.1f}" if metrics['fk_grade'] is not None else "N/A")
     col6.metric("Reading Ease", f"{float(metrics['reading_ease']):.1f}")
     col7.metric("Avg Sentence", f"{float(metrics['avg_sentence_length']):.1f} words")
-
-
-def render_pos_highlighter(text: str) -> None:
-    st.subheader("Parts of Speech")
-    st.write("Select one or more word classes to highlight every matching word in your submitted text.")
-    pos_options = (("Verb", "VERB"), ("Noun", "NOUN"), ("Adverb", "ADV"), ("Adjective", "ADJ"))
-    toggle_columns = st.columns(4)
-    selected_pos = {
-        pos
-        for column, (label, pos) in zip(toggle_columns, pos_options)
-        if column.checkbox(label, value=label == "Verb", key=f"en_pos_{pos}")
-    }
-
-    try:
-        counts = part_of_speech_counts(text, POS_MODEL)
-        highlighted_html, highlighted_counts = highlight_parts_of_speech(text, POS_MODEL, selected_pos)
-    except RuntimeError:
-        st.error("spaCy is not installed. Run `pip install -r requirements.txt` and restart the app.")
-        return
-    except OSError:
-        st.error("The English language model is not installed. Run `python -m spacy download en_core_web_sm` and restart the app.")
-        return
-
-    highlighted_total = sum(highlighted_counts.values())
-    selected_labels = [label.lower() for label, pos in pos_options if pos in selected_pos]
-    selection_summary = ", ".join(selected_labels) if selected_labels else "no word classes"
-    st.caption(
-        f"{highlighted_total} words highlighted ({selection_summary}). "
-        f"Verbs: {counts['VERB']} · Nouns: {counts['NOUN']} · Adverbs: {counts['ADV']} · Adjectives: {counts['ADJ']}"
-    )
-    st.markdown(
-        f'<div style="line-height: 1.8; padding: 1rem; border: 1px solid #d1d5db; border-radius: 0.5rem; white-space: pre-wrap;">{highlighted_html}</div>',
-        unsafe_allow_html=True,
-    )
 
 
 def main() -> None:
@@ -401,7 +279,7 @@ def main() -> None:
     st.caption("Local-first writing feedback for quick classroom review.")
 
     st.sidebar.header("Settings")
-    english_only = st.sidebar.toggle("English-first guidance", value=True)
+    language_choice = st.sidebar.selectbox("Text language", ["Auto-detect", "English", "French"])
     show_examples = st.sidebar.toggle("Show sentence flags", value=True)
     st.sidebar.markdown(
         "This version runs locally. No AI key is required, and the app stays useful even without external services."
@@ -424,22 +302,26 @@ def main() -> None:
         st.warning("Please paste some text before running the analysis.")
         return
 
+    detected_language = detect_language(text)
+    language_code = select_analysis_language(detected_language, language_choice)
+    if language_code is None:
+        st.warning(f"Detected language: `{detected_language}`. Choose English or French under Text language if detection is incorrect.")
+        return
+
     with st.spinner("Running local analysis..."):
-        language_code = detect_language(text)
-        metrics = analyze_basic_metrics(text)
-        sentiment = analyze_sentiment(text)
-        style = analyze_style(text)
-        extra_tools = analyze_additional_tools(text)
+        metrics = analyze_basic_metrics(text, language_code)
+        try:
+            sentiment = analyze_sentiment(text, language_code)
+        except RuntimeError as exc:
+            st.error(str(exc))
+            return
+        style = analyze_style(text, language_code)
+        extra_tools = analyze_additional_tools(text, language_code)
         summary = build_summary(text, metrics, sentiment)
         score, band = executive_presence_score(metrics, sentiment, style)
         ai_prompt = build_ai_prompt(text, language_code)
 
-    if language_code != "en":
-        st.warning(
-            f"Detected language: `{language_code}`. This version is English-first, so readability and sentiment signals may be less reliable."
-        )
-    elif english_only:
-        st.success("Detected language: `en`. English-first scoring is enabled.")
+    st.success(f"Detected language: `{detected_language}`. Using {LANGUAGES[language_code]} analysis.")
 
     render_metric_cards(metrics, score, band)
 
@@ -460,65 +342,23 @@ def main() -> None:
             st.write(f"Estimated reading time: {format_reading_time(float(metrics['reading_minutes']))}")
         with stats_col2:
             st.markdown("**Interpretation**")
-            st.write("Flesch-Kincaid grade estimates how difficult the text may feel to a reader.")
+            st.write("Flesch-Kincaid grade is shown for English only. French text uses French reading ease; its grade is marked N/A.")
             st.write("Reading ease is higher when prose is easier to scan quickly.")
-            st.write("Executive presence here is a heuristic score based on readability, repetition, and tonal stability.")
+            st.write("Executive presence here is a heuristic score based on readability, repetition, and sentiment intensity; it is not a validated assessment.")
 
     with tab2:
-        st.subheader("Strengths")
-        if style["strengths"]:
-            for item in style["strengths"]:
-                st.write(f"- {item}")
-        else:
-            st.write("- No standout strengths were identified by the local ruleset.")
-
-        st.subheader("Revision Priorities")
-        if style["improvements"]:
-            for item in style["improvements"]:
-                st.write(f"- {item}")
-        else:
-            st.write("- No major local revision flags were raised.")
-
-        if style["repeated_terms"]:
-            st.subheader("Repeated Terms")
-            repeated_text = ", ".join(f"{word} ({count})" for word, count in style["repeated_terms"])
-            st.write(repeated_text)
-
-        if show_examples:
-            if style["long_sentences"]:
-                st.subheader("Long Sentences to Review")
-                for sentence in style["long_sentences"]:
-                    st.code(sentence, language=None)
-            if style["short_sentences"]:
-                st.subheader("Very Short Sentences")
-                for sentence in style["short_sentences"]:
-                    st.code(sentence, language=None)
+        render_style(style, show_examples)
 
     with tab3:
-        st.subheader("Sentiment Snapshot")
-        sent_col1, sent_col2, sent_col3, sent_col4 = st.columns(4)
-        sent_col1.metric("Overall", sentiment["label"])
-        sent_col2.metric("Positive", f"{float(sentiment['positive']):.2f}")
-        sent_col3.metric("Neutral", f"{float(sentiment['neutral']):.2f}")
-        sent_col4.metric("Negative", f"{float(sentiment['negative']):.2f}")
-
-        st.progress((float(sentiment["compound"]) + 1) / 2)
-        st.caption(
-            f"Compound sentiment score: {float(sentiment['compound']):.2f}. Values near zero usually indicate a more measured tone."
-        )
-
-        st.markdown("**Interpretation**")
-        st.write(
-            "This sentiment model is local and lightweight. It is useful for catching broad tonal drift, not for grading nuance or intent."
-        )
+        render_sentiment(text, language_code)
 
     with tab4:
-        render_pos_highlighter(text)
+        render_pos_highlighter(text, language_code)
 
     with tab5:
         st.subheader("Use External AI Without Sharing Your Key")
         st.write(
-            "This app does not call an external model. If you want richer critique, copy the prompt below into an AI tool of your choice."
+            "For richer critique, copy the prompt below into an AI tool of your choice. The Journalistic Angle tab can also send your text to the configured CSCS API."
         )
         st.info(
             "I have not wired in an automatic AI-authorship detector. The better-looking API options are paid or English-only, and I would not trust them enough to make this part feel authoritative for student evaluation."
@@ -587,7 +427,7 @@ def main() -> None:
         tool_col1.metric("Paragraphs", int(extra_tools["paragraph_count"]))
         tool_col2.metric("Unique Words", int(extra_tools["unique_words"]))
         tool_col3.metric("Lexical Diversity", f"{float(extra_tools['lexical_diversity']):.2f}")
-        tool_col4.metric("Passive Voice Flags", int(extra_tools["passive_count"]))
+        tool_col4.metric("Passive Voice Flags", int(extra_tools["passive_count"]) if extra_tools["passive_count"] is not None else "N/A")
 
         tool_col5, tool_col6, tool_col7 = st.columns(3)
         tool_col5.metric("Hedging Words", int(extra_tools["hedge_count"]))
@@ -597,9 +437,9 @@ def main() -> None:
         st.markdown("**What these mean**")
         st.write("`Paragraphs` and `Longest Paragraph` help you see whether the draft is visually broken up or hiding large blocks of text.")
         st.write("`Unique Words` and `Lexical Diversity` give a rough sense of vocabulary variety. Higher is not always better.")
-        st.write("`Passive Voice Flags` marks possible passive constructions for review. It is a rough pattern match, not a grammar verdict.")
-        st.write("`Hedging Words` counts softeners like `maybe`, `perhaps`, or `likely`, which can make a piece sound cautious or less direct.")
-        st.write("`Transitions Found` looks for connectors like `however`, `therefore`, and `for example` to show how explicitly ideas are linked.")
+        st.write("`Passive Voice Flags` uses a rough English pattern match. It is unavailable for French and shown as N/A.")
+        st.write("`Hedging Words` counts softeners in the selected language, such as `perhaps` or `peut-être`.")
+        st.write("`Transitions Found` looks for connectors in the selected language, such as `however` or `cependant`.")
 
         if extra_tools["transition_hits"]:
             st.markdown("**Transitions detected in this draft**")
