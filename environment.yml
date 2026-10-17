@@ -6,10 +6,10 @@ dependencies:
   - pip
   - pip:
       - streamlit
-      - textstat
+      - textstat==0.7.13
       - langdetect
       - vaderSentiment
       - vaderSentiment-fr
-      - spacy>=3.8,<3.9
+      - spacy==3.8.16
       - en-core-web-md @ https://github.com/explosion/spacy-models/releases/download/en_core_web_md-3.8.0/en_core_web_md-3.8.0-py3-none-any.whl
       - fr-core-news-md @ https://github.com/explosion/spacy-models/releases/download/fr_core_news_md-3.8.0/fr_core_news_md-3.8.0-py3-none-any.whl

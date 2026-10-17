@@ -62,7 +62,7 @@
     "diagnostics_meaning": "**Comment les interpréter**",
     "paragraph_help": "« Paragraphes » et « Paragraphe le plus long » permettent de repérer les blocs de texte trop denses.",
     "lexical_help": "« Mots distincts » et « Diversité lexicale » donnent une idée de la variété du vocabulaire. Un score plus élevé n’est pas toujours préférable.",
-    "passive_help": "Les indices de voix passive reposent sur un motif approximatif en anglais. Ils ne sont pas disponibles en français et sont indiqués N/D.",
+    "passive_help": "Les indices de voix passive reposent sur l’analyse syntaxique des propositions passives.",
     "hedge_help": "Les expressions de prudence sont comptées dans la langue choisie, par exemple « peut-être » ou « perhaps ».",
     "transition_help": "Les transitions sont repérées dans la langue choisie, par exemple « cependant » ou « however ».",
     "detected_transitions": "**Transitions repérées dans ce texte**",

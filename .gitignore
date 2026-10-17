@@ -3,6 +3,7 @@ __pycache__/
 .venv/
 .env
 .env.*
+
 !.env.example
 assets/corpus_legacy
 assets/corpus

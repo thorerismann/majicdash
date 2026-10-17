@@ -1,11 +1,15 @@
 """Local text counts, readability measures, and writing diagnostics.
 
 analyze_basic_metrics returns counts, reading time, sentence length, and
-language-specific readability scores. analyze_additional_tools adds paragraph
-lengths, lexical diversity, hedges, transitions, and English passive-voice flags.
-Vocabulary comes from language.py; tokenization comes from text_utils.py.
-Results are cached by text and language. format_reading_time formats a translated
-duration for the dashboard. This module does not render tabs or call an API.
+language-specific readability scores (Flesch-Kandel for French, Flesch for English).
+analyze_additional_tools adds paragraph lengths, lexical diversity, hedges,
+transitions, and passive-voice flags. One cached spaCy analysis supplies tokens,
+sentences, lemmas, and dependencies to all three analyses, reusing the models
+loaded by pos_highlighting. Words are spaCy tokens containing letters (including
+contractions and elisions); numbers and standalone punctuation do not count.
+Repetition uses content-word lemmas (nouns, verbs, adjectives), while lexical
+diversity uses surface forms. textstat supplies English readability and syllable
+counts. This module also renders the basic statistics and diagnostics.
 """
 
 import streamlit as st
@@ -14,16 +18,78 @@ from math import ceil
 from textstat.textstat import textstatistics
 from .language import DEFAULT_LANGUAGE, get_words, translator
 from collections import Counter
+from spacy.matcher import PhraseMatcher
+from .pos_highlighting import POS_MODELS, load_pos_model, parse_pos_text
 
 
-def split_sentences(text: str) -> list[str]:
-    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
-    return [sentence.strip() for sentence in sentences if sentence.strip()]
+@st.cache_data(show_spinner=False, max_entries=32, ttl=3600)
+def _analyze_text(text: str, language_code: str) -> dict:
+    """Cache small derived values, not a Doc and its model vocabulary."""
+    if language_code not in POS_MODELS:
+        raise ValueError(f"Unsupported analysis language: {language_code}")
+    doc = parse_pos_text(text, POS_MODELS[language_code])
+    words = [token for token in doc if any(char.isalpha() for char in token.text)]
+    word_indices = {token.i for token in words}
+    vocabulary = get_words(language_code)["vocabulary"]
+    stopwords = set(vocabulary["stopwords"])
+    lemmas = [
+        token.lemma_.lower() for token in words
+        if not token.is_stop and token.lower_ not in stopwords
+        and token.lemma_.lower() not in stopwords
+        and token.pos_ in {"NOUN", "VERB", "ADJ"}
+    ]
+    sentences = [
+        (text[span.start_char:span.end_char].strip(),
+         sum(token.i in word_indices for token in span))
+        for span in doc.sents if span.text.strip()
+    ]
+
+    # Paragraph boundaries are formatting, not grammatical sentence boundaries.
+    paragraph_lengths = []
+    word_iter = iter(words)
+    token = next(word_iter, None)
+    start = 0
+    ends = [(match.start(), match.end()) for match in re.finditer(r"\n\s*\n", text)]
+    for end, next_start in ends + [(len(text), len(text))]:
+        count = 0
+        while token is not None and token.idx < end:
+            count += 1
+            token = next(word_iter, None)
+        if text[start:end].strip():
+            paragraph_lengths.append(count)
+        start = next_start
+
+    # Match the editorial phrase lists on spaCy token boundaries, ignoring case.
+    nlp = load_pos_model(POS_MODELS[language_code])
+    matcher = PhraseMatcher(doc.vocab, attr="LOWER")
+    for category in ("hedges", "transitions"):
+        for phrase in vocabulary[category]:
+            normalized = phrase.translate(str.maketrans({"’": "'", "ʼ": "'"}))
+            matcher.add(f"{category}:{phrase}", [nlp.make_doc(normalized)])
+    matches = [doc.vocab.strings[match_id].split(":", 1) for match_id, _, _ in matcher(doc)]
+
+    # Count passive predicates once, even if both subject and auxiliary flag it.
+    passive_heads = {
+        token.head.i for token in doc
+        if token.dep_ in {"auxpass", "nsubjpass", "csubjpass", "aux:pass", "nsubj:pass", "csubj:pass"}
+    }
+    return {
+        "words": [token.lower_ for token in words],
+        "lemmas": lemmas,
+        "sentences": sentences,
+        "paragraph_lengths": paragraph_lengths,
+        "passive_count": len(passive_heads),
+        "hedge_count": sum(category == "hedges" for category, _ in matches),
+        "transition_hits": sorted({phrase for category, phrase in matches if category == "transitions"}),
+    }
 
 
-def tokenize_words(text: str) -> list[str]:
-    # Keep Unicode letters (including œ) and normalize typographic apostrophes.
-    return re.findall(r"[^\W\d_]+(?:['-][^\W\d_]+)*", text.lower().replace("’", "'"))
+def split_sentences(text: str, language_code: str = DEFAULT_LANGUAGE) -> list[str]:
+    return [sentence for sentence, _ in _analyze_text(text, language_code)["sentences"]]
+
+
+def tokenize_words(text: str, language_code: str = DEFAULT_LANGUAGE) -> list[str]:
+    return _analyze_text(text, language_code)["words"]
 
 
 @st.cache_data(show_spinner=False)
@@ -31,14 +97,25 @@ def analyze_basic_metrics(text: str, language_code: str = DEFAULT_LANGUAGE) -> d
     # Each analysis has its own language setting, including concurrent sessions.
     stats = textstatistics()
     stats.set_lang(language_code)
-    words = tokenize_words(text)
-    sentences = split_sentences(text)
+    analysis = _analyze_text(text, language_code)
+    words = analysis["words"]
+    sentences = analysis["sentences"]
     word_count = len(words)
     sentence_count = len(sentences)
-    syllable_count = stats.syllable_count(text)
+    syllable_count = stats.syllable_count(text) if text.strip() else 0
     char_count = len(text)
     avg_sentence_length = len(words) / max(1, len(sentences))
     reading_minutes = len(words) / 200 if words else 0.0
+
+    if not text.strip():
+        reading_ease = 0.0
+    elif language_code == "fr":
+        # Flesch-Kandel (de Landsheere) formula adapted for French:
+        # 207 - (1.015 * avg_sentence_length) - (73.6 * (syllables / words))
+        syllables_per_word = syllable_count / max(1, word_count)
+        reading_ease = round(207.0 - (1.015 * avg_sentence_length) - (73.6 * syllables_per_word), 2)
+    else:
+        reading_ease = stats.flesch_reading_ease(text)
 
     return {
         "word_count": word_count,
@@ -48,40 +125,27 @@ def analyze_basic_metrics(text: str, language_code: str = DEFAULT_LANGUAGE) -> d
         "avg_sentence_length": avg_sentence_length,
         "reading_minutes": reading_minutes,
         "fk_grade": (stats.flesch_kincaid_grade(text) if text.strip() else 0.0) if language_code == "en" else None,
-        "reading_ease": stats.flesch_reading_ease(text) if text.strip() else 0.0,
+        "reading_ease": reading_ease,
         "language_code": language_code,
     }
 
 
 @st.cache_data(show_spinner=False)
 def analyze_additional_tools(text: str, language_code: str = DEFAULT_LANGUAGE) -> dict[str, object]:
-    words = tokenize_words(text)
-    paragraphs = [paragraph.strip() for paragraph in re.split(r"\n\s*\n", text) if paragraph.strip()]
+    analysis = _analyze_text(text, language_code)
+    words = analysis["words"]
     unique_words = len(set(words))
     lexical_diversity = unique_words / len(words) if words else 0.0
-    vocabulary = get_words(language_code)["vocabulary"]
-    auxiliaries = "|".join(re.escape(word) for word in vocabulary["passive_auxiliaries"])
-    passive_hits = re.findall(r"\b(?:" + auxiliaries + r")\s+\w+(?:ed|en)\b", text.lower()) if auxiliaries else []
-    hedges = vocabulary["hedges"]
-    transitions = vocabulary["transitions"]
-    lowered_text = text.lower().replace("’", "'")
-    hedge_count = sum(len(re.findall(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", lowered_text)) for phrase in hedges)
-
-    transition_hits: list[str] = []
-    for phrase in sorted(transitions):
-        if re.search(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", lowered_text):
-            transition_hits.append(phrase)
-
-    paragraph_lengths = [len(tokenize_words(paragraph)) for paragraph in paragraphs]
+    paragraph_lengths = analysis["paragraph_lengths"]
     longest_paragraph = max(paragraph_lengths) if paragraph_lengths else 0
 
     return {
-        "paragraph_count": len(paragraphs) if paragraphs else (1 if text.strip() else 0),
+        "paragraph_count": len(paragraph_lengths),
         "lexical_diversity": lexical_diversity,
         "unique_words": unique_words,
-        "passive_count": len(passive_hits) if language_code == "en" else None,
-        "hedge_count": hedge_count,
-        "transition_hits": transition_hits[:8],
+        "passive_count": analysis["passive_count"],
+        "hedge_count": analysis["hedge_count"],
+        "transition_hits": analysis["transition_hits"][:8],
         "longest_paragraph": longest_paragraph,
         "paragraph_lengths": paragraph_lengths[:6],
     }
@@ -163,19 +227,14 @@ def render_diagnostics(t, extra_tools):
 @st.cache_data(show_spinner=False)
 def analyze_style(text: str, language_code: str = DEFAULT_LANGUAGE) -> dict[str, object]:
     t = translator(language_code)
-    words = tokenize_words(text)
-    sentences = split_sentences(text)
-    vocabulary = get_words(language_code)["vocabulary"]
-    elisions = "|".join(re.escape(prefix) for prefix in vocabulary["elision_prefixes"])
-    if elisions:
-        words = [re.sub(r"^(?:" + elisions + r")'", "", word) for word in words]
-    stopwords = set(vocabulary["stopwords"])
-    lowered = [word for word in words if word not in stopwords and len(word) > 3]
-    frequencies = Counter(lowered)
+    analysis = _analyze_text(text, language_code)
+    words = analysis["words"]
+    sentences = analysis["sentences"]
+    frequencies = Counter(analysis["lemmas"])
     repeated_terms = [(word, count) for word, count in frequencies.most_common(8) if count > 2]
 
-    long_sentences = [sentence for sentence in sentences if len(tokenize_words(sentence)) >= 28]
-    short_sentences = [sentence for sentence in sentences if len(tokenize_words(sentence)) <= 5]
+    long_sentences = [sentence for sentence, length in sentences if length >= 28]
+    short_sentences = [sentence for sentence, length in sentences if length <= 5]
     exclamation_count = text.count("!")
     question_count = text.count("?")
 

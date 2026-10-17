@@ -62,7 +62,7 @@
     "diagnostics_meaning": "**What these mean**",
     "paragraph_help": "`Paragraphs` and `Longest Paragraph` help you see whether the draft is visually broken up or hiding large blocks of text.",
     "lexical_help": "`Unique Words` and `Lexical Diversity` give a rough sense of vocabulary variety. Higher is not always better.",
-    "passive_help": "`Passive Voice Flags` uses a rough English pattern match. It is unavailable for French and shown as N/A.",
+    "passive_help": "`Passive Voice Flags` relies on syntactic dependency patterns to identify passive constructions.",
     "hedge_help": "`Hedging Words` counts softeners in the selected language, such as `perhaps` or `peut-être`.",
     "transition_help": "`Transitions Found` looks for connectors in the selected language, such as `however` or `cependant`.",
     "detected_transitions": "**Transitions detected in this draft**",

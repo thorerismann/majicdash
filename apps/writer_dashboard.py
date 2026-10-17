@@ -24,6 +24,7 @@ from modules.angle_visual import render_visual_angle
 from modules.inference import render_angle_analysis
 from modules.main_displays import render_sidebar, render_main
 from modules.handle_inputs import initial_text_analysis, accept_text
+from modules.corpus_comparison import COPY as CORPUS_COPY, render_corpus_comparison
 
 
 def main() -> None:
@@ -46,15 +47,18 @@ def main() -> None:
     st.success(t("detected_language", detected=t("unknown") if detected_language == "unknown" else detected_language, language=t(language_code)))
 
 
-    tab1, tab2, tab3, tab4, tab5, = st.tabs(
-        [t("basic_stats"), t("sentiment"), t("pos"), t("angle_machine"), t("journalistic_angle")]
+    tab1, comparison_tab, tab2, tab3, tab4, tab5 = st.tabs(
+        [t("basic_stats"), CORPUS_COPY[language_code]["tab"], t("sentiment"), t("pos"), t("angle_machine"), t("journalistic_angle")]
     )
 
     with tab1:
         render_basic_stats(metrics, sentiment, language_code)
-        show_examples = st.toggle(t("show_examples"))
+        show_examples = st.toggle("show_examples")
         render_style(style, show_examples, language_code)
         render_diagnostics(t, extra_tools)
+
+    with comparison_tab:
+        render_corpus_comparison(metrics, extra_tools, language_code)
 
     with tab2:
         render_sentiment(text, language_code)

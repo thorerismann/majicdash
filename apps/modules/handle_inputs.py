@@ -1,7 +1,8 @@
 import streamlit as st
 
 def accept_text(t):
-    text = st.text_area(t("input_label"), key="writing_text", height=320, placeholder=t("input_placeholder"))
+    with st.expander("Expand to input text"):
+        text = st.text_area(t("input_label"), key="writing_text", height=320, placeholder=t("input_placeholder"))
     return text
 
 
