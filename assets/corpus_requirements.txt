@@ -1,0 +1,11 @@
+# Offline corpus builder dependencies; versions from the verified build environment.
+pandas==3.0.6
+numpy==2.5.4
+pyarrow==26.0.0
+spacy==3.8.16
+langdetect==1.0.9
+textstat==0.7.13
+vaderSentiment==3.3.2
+vaderSentiment-fr==1.3.4
+fr-core-news-md @ https://github.com/explosion/spacy-models/releases/download/fr_core_news_md-3.8.0/fr_core_news_md-3.8.0-py3-none-any.whl
+en-core-web-md @ https://github.com/explosion/spacy-models/releases/download/en_core_web_md-3.8.0/en_core_web_md-3.8.0-py3-none-any.whl

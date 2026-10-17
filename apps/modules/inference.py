@@ -1,4 +1,14 @@
-"""Small client for the CSCS OpenAI-compatible chat completion endpoint."""
+"""Journalistic angle inference: API access, tab rendering, and editable drafts.
+
+This module owns the complete seventh tab. ``render_angle_analysis`` receives
+the source text and language, displays the editable prompt, sends a request only
+when Generate is clicked, and displays the editable response or a localised error.
+Prompt/result drafts are kept separately for French and English across reruns.
+
+``request_angle_analysis`` is the independently testable CSCS HTTP client.
+``get_api_key`` reads Streamlit secrets, the environment, then the project .env;
+credentials are never displayed. UI wording comes from the locale dictionaries.
+"""
 
 from __future__ import annotations
 
@@ -9,6 +19,8 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
 import streamlit as st
+
+from .language import DEFAULT_LANGUAGE, translator
 
 API_URL = "https://api.inference.cscs.ch/v1/chat/completions"
 MODEL = "swiss-ai/Apertus-8B-Instruct-2509"
@@ -38,10 +50,16 @@ def get_api_key() -> str:
     return ""
 
 
-def request_angle_analysis(text: str, prompt: str) -> str:
+def request_angle_analysis(text: str, prompt: str, language_code: str = DEFAULT_LANGUAGE) -> str:
+    """Send one explicit request; reject empty input and unusable API responses."""
+    t = translator(language_code)
+    if not text.strip():
+        raise RuntimeError(t("empty_request"))
+    if not prompt.strip():
+        raise RuntimeError(t("empty_prompt"))
     key = get_api_key()
     if not key:
-        raise RuntimeError("CSCS_INFERENCE_API_KEY is not configured. Add it to .env or the environment.")
+        raise RuntimeError(t("api_key_missing"))
 
     payload = {
         "model": MODEL,
@@ -61,13 +79,55 @@ def request_angle_analysis(text: str, prompt: str) -> str:
         with urlopen(request, timeout=120) as response:
             result = json.loads(response.read().decode("utf-8"))
     except HTTPError as exc:
-        raise RuntimeError(f"Inference API returned HTTP {exc.code}.") from None
+        raise RuntimeError(t("api_http_error", code=exc.code)) from None
     except (URLError, TimeoutError) as exc:
-        raise RuntimeError(f"Could not reach the inference API: {exc.reason if isinstance(exc, URLError) else 'request timed out'}") from None
+        raise RuntimeError(t("api_connection_error", reason=exc.reason if isinstance(exc, URLError) else t("api_timeout"))) from None
     except (json.JSONDecodeError, UnicodeDecodeError):
-        raise RuntimeError("The inference API returned an invalid response.") from None
+        raise RuntimeError(t("api_invalid")) from None
 
     try:
-        return result["choices"][0]["message"]["content"].strip()
+        content = result["choices"][0]["message"]["content"]
     except (KeyError, IndexError, TypeError, AttributeError):
-        raise RuntimeError("The inference API response did not contain an analysis.") from None
+        raise RuntimeError(t("api_no_analysis")) from None
+    if not isinstance(content, str) or not content.strip():
+        raise RuntimeError(t("api_no_analysis"))
+    return content.strip()
+
+
+def save_angle_draft(field: str, language_code: str) -> None:
+    """Keep edits when Streamlit cleans up widgets hidden by a language switch."""
+    st.session_state["angle_drafts"][language_code][field] = st.session_state[f"angle_{field}_{language_code}"]
+
+
+def render_angle_analysis(text: str, language_code: str = DEFAULT_LANGUAGE) -> None:
+    """Render the full inference tab without relying on dashboard-local variables."""
+    t = translator(language_code)
+    st.subheader(t("angle_analysis"))
+    drafts = st.session_state.setdefault("angle_drafts", {})
+    draft = drafts.setdefault(language_code, {"prompt": t("angle_prompt"), "result": ""})
+    prompt_key = f"angle_prompt_{language_code}"
+    result_key = f"angle_result_{language_code}"
+    st.session_state.setdefault(prompt_key, draft["prompt"])
+    angle_prompt = st.text_area(
+        t("request_prompt"),
+        height=130,
+        key=prompt_key,
+        on_change=save_angle_draft,
+        args=("prompt", language_code),
+    )
+
+    if st.button(t("generate_angle"), type="primary", key="generate_angle"):
+        if not text.strip() or not angle_prompt.strip():
+            st.warning(t("empty_request" if not text.strip() else "empty_prompt"))
+        else:
+            try:
+                with st.spinner(t("requesting")):
+                    draft["result"] = request_angle_analysis(text, angle_prompt, language_code)
+                    st.session_state[result_key] = draft["result"]
+            except RuntimeError as exc:
+                st.error(str(exc))
+    st.session_state.setdefault(result_key, draft["result"])
+    st.text_area(
+        t("editable_analysis"), height=280, key=result_key,
+        on_change=save_angle_draft, args=("result", language_code),
+    )
