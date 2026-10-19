@@ -7,8 +7,10 @@ This folder is a self-contained package of the Streamlit app, prepared so you ca
 - `apps/writer_dashboard.py`: English interface with English and French text analysis
 - `apps/modules/pos_highlighting.py`: POS model selection, tagging, counts, highlighting, and tab rendering
 - `apps/modules/sentiment_analysis.py`: English/French VADER scoring, sentence analysis, CSV export, and sentiment tab rendering
-- `apps/modules/style_analysis.py`: English/French style rules, repetition checks, sentence flags, and Style tab rendering
-- `apps/modules/text_utils.py`: shared sentence splitting and Unicode word tokenization
+- `apps/modules/basic_stats.py`: shared spaCy analysis, statistics, style rules and diagnostics
+- `apps/modules/main_displays.py`: input layout and main display
+- `apps/modules/handle_inputs.py`: submission validation and analysis state
+- `apps/modules/corpus_comparison.py`: distributions, two-axis plots and comparison exports
 - `assets/code_machine_angle.html`: angle-machine HTML asset
 - `requirements.txt`: pip dependencies for the app
 - `environment.yml`: optional Conda environment
@@ -33,14 +35,14 @@ python -m pip install -r requirements.txt
 
 ```bash
 mamba env create -f environment.yml
-conda activate majicdash
+conda activate majic2
 ```
 
 ## spaCy Language Model
 
-The English and French models (`en_core_web_md` and `fr_core_news_md` 3.8.0) are included in both setup files, alongside compatible spaCy 3.8.x and both sentiment libraries. Pip installs the models as regular Python packages; Mamba installs them through the `pip` section of `environment.yml`. No separate model download is needed.
+The English and French models (`en_core_web_sm` and `fr_core_news_sm` 3.8.0) are included in both setup files, alongside compatible spaCy 3.8.x and both sentiment libraries. Pip installs the models as regular Python packages; Mamba installs them through the `pip` section of `environment.yml`. No separate model download is needed.
 
-The sidebar's **Text language** setting defaults to auto-detection, with English and French overrides for short or ambiguous text. This selects the matching grammar model, sentiment analyzer, readability language, stopwords, and diagnostic vocabulary. Flesch-Kincaid grade and passive-voice flags are available for English only; French shows N/A for these measures. Style and executive-presence scores remain rough heuristics.
+The sidebar's **Text language** setting defaults to auto-detection, with English and French overrides for short or ambiguous text. This selects the matching grammar model, sentiment analyzer, readability language, stopwords, and diagnostic vocabulary. Flesch-Kincaid grade is English-only; passive predicates are detected from each language model’s dependencies. Style and executive-presence scores remain rough heuristics.
 
 To update the existing `majic2` environment:
 
@@ -51,7 +53,7 @@ python -m pip install -r requirements.txt
 
 Alternatively, run `mamba env update -n majic2 -f environment.yml`. Restart Streamlit after installing dependencies. The model powers the existing **Parts of Speech** tab.
 
-The POS module uses the medium (`md`) models. Its Verb category includes both `VERB` and `AUX` tags. Apostrophes are normalized for analysis while the original spelling, punctuation, and spacing are preserved in the display. Counts and highlights come from the same model pass.
+The POS module uses the small (`sm`) models. Its Verb category includes both `VERB` and `AUX` tags. Apostrophes are normalized for analysis while the original spelling, punctuation, and spacing are preserved in the display. Counts and highlights come from the same model pass.
 
 ## Run Without VS Code
 
@@ -76,3 +78,23 @@ French text uses `vaderSentiment-fr`; English uses `vaderSentiment`. VADER does 
 - The app uses the angle-machine HTML asset in `assets/`.
 - The part-of-speech highlighting tab uses spaCy and the matching language model installed during setup.
 - The original source files outside this folder are not needed for the bundle to run.
+
+## Submitting text
+
+The input panel starts open. Analyze requires non-whitespace text, collapses the panel, and displays results. Editing the text requires another Analyze click. Chart and display controls keep the submitted analysis without sending new requests.
+
+Analyze runs locally. Only the separate journalistic-angle Generate button sends a request to CSCS Apertus.
+
+## Expanded corpus comparison
+
+The packaged reference is recalculated from 805 eligible articles with the small models and the same functions as live input. It includes document/sentence VADER scores, lexical diversity, style diagnostics, every POS category, every dependency/entity label supported by the models, and common morphological features. Select a measure for its distribution or expand **Compare any two dimensions** to choose both scatterplot axes. Both plots use the selected language, article type and year filters. CSV downloads include either the current measure or all available dimensions.
+
+POS, dependency and morphology shares divide by non-space tokens; entity shares divide by entity mentions. Entity frequency is also available per 100 words. Unsupported dependency/entity labels are missing, rather than zero, and excluded from controls. The detailed spaCy view separates VERB and AUX, includes all observed morphology features, and exports token text, offsets, lemmas, fine tags, dependency heads, morphology and entities.
+
+To refresh the reference from the local cleaned corpus:
+
+```bash
+mamba run -n majic2 python scripts/build_dashboard_reference.py
+```
+
+`assets/cleaned.csv` is a local, ignored build input. The generated reference under `apps/data/` is packaged with the app; rebuilding does not call Apertus. Runtime input state uses [Streamlit’s controlled expander API](https://docs.streamlit.io/develop/api-reference/layout/st.expander), so setup requires Streamlit 1.66 or newer.

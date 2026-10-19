@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Read assets/cleaned.csv and write ONE file: apps/data/corpus_reference.csv.
+"""Build apps/data/corpus_reference.csv from assets/cleaned.csv.
 
 Run in the app environment: python scripts/build_dashboard_reference.py
 Rerun after changing analysis calculations or editing the cleaned source text.
 Uses the dashboard's current analysis, including its French readability formula.
-Old metric columns in cleaned.csv are ignored. No HTML processing, API calls,
-matrix files, JSON manifests or other generated outputs are involved.
+Old metric columns in cleaned.csv are ignored. No API calls are involved.
 """
 
 import argparse
@@ -19,6 +18,7 @@ sys.path.insert(0, str(ROOT / "apps"))
 
 from modules.basic_stats import analyze_additional_tools, analyze_basic_metrics, _analyze_text
 from modules.corpus_reference import REFERENCE_PATH, comparison_values
+from modules.sentiment_analysis import sentiment_dimensions, analyze_sentiment, analyze_sentiment_report
 
 
 def build(source: Path, output: Path) -> pd.DataFrame:
@@ -42,12 +42,14 @@ def build(source: Path, output: Path) -> pd.DataFrame:
         rows.append({
             "article_id": article.article_id, "year": article.year,
             "language": article.analysis_language, "medium": article.medium or "Unknown",
-            **comparison_values(metrics, extra),
+            **comparison_values(metrics, extra, sentiment_dimensions(article.body_text, article.analysis_language)),
         })
         # Bound memory while processing the corpus offline.
         analyze_basic_metrics.clear()
         analyze_additional_tools.clear()
         _analyze_text.clear()
+        analyze_sentiment.clear()
+        analyze_sentiment_report.clear()
         if index % 100 == 0 or index == len(selected):
             print(f"Analyzed {index}/{len(selected)}", flush=True)
     frame = pd.DataFrame(rows)
