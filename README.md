@@ -13,6 +13,7 @@ This folder is a self-contained package of the Streamlit app, prepared so you ca
 - `apps/modules/corpus_comparison.py`: distributions, two-axis plots and comparison exports
 - `assets/code_machine_angle.html`: angle-machine HTML asset
 - `requirements.txt`: pip dependencies for the app
+- `apps/requirements.txt`: Community Cloud entrypoint that includes the shared pip dependencies
 - `environment.yml`: optional Conda environment
 
 ## Open In VS Code
@@ -37,6 +38,20 @@ python -m pip install -r requirements.txt
 mamba env create -f environment.yml
 conda activate majic2
 ```
+
+## Streamlit Community Cloud
+
+Deploy `apps/writer_dashboard.py` with Python 3.12. Community Cloud finds
+`apps/requirements.txt` beside the entrypoint first; it includes the root
+`requirements.txt`, including both small spaCy model wheels. The root
+`environment.yml` remains available for local Mamba setup.
+
+Push these dependency files to the branch selected in Cloud (for example,
+`main`), then rebuild the app. If spaCy reports E050, check the installation
+log for `en-core-web-sm` and `fr-core-news-sm` and any preceding install errors.
+Do not download models during app startup.
+
+See [Community Cloud dependency-file precedence](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/app-dependencies).
 
 ## spaCy Language Model
 
