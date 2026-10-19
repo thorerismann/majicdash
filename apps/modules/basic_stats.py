@@ -19,7 +19,7 @@ from textstat.textstat import textstatistics
 from .language import DEFAULT_LANGUAGE, get_words, translator
 from collections import Counter
 from spacy.matcher import PhraseMatcher
-from .pos_highlighting import POS_MODELS, load_pos_model, parse_pos_text
+from .pos_highlighting import POS_MODELS, load_pos_model, parse_pos_text, describe_doc
 
 
 @st.cache_data(show_spinner=False, max_entries=32, ttl=3600)
@@ -74,6 +74,7 @@ def _analyze_text(text: str, language_code: str) -> dict:
         if token.dep_ in {"auxpass", "nsubjpass", "csubjpass", "aux:pass", "nsubj:pass", "csubj:pass"}
     }
     return {
+        "spacy": describe_doc(doc, text, language_code),
         "words": [token.lower_ for token in words],
         "lemmas": lemmas,
         "sentences": sentences,
@@ -81,6 +82,7 @@ def _analyze_text(text: str, language_code: str) -> dict:
         "passive_count": len(passive_heads),
         "hedge_count": sum(category == "hedges" for category, _ in matches),
         "transition_hits": sorted({phrase for category, phrase in matches if category == "transitions"}),
+        "transition_count": sum(category == "transitions" for category, _ in matches),
     }
 
 
@@ -140,11 +142,17 @@ def analyze_additional_tools(text: str, language_code: str = DEFAULT_LANGUAGE) -
     longest_paragraph = max(paragraph_lengths) if paragraph_lengths else 0
 
     return {
+        **analysis["spacy"]["metrics"],
         "paragraph_count": len(paragraph_lengths),
         "lexical_diversity": lexical_diversity,
         "unique_words": unique_words,
         "passive_count": analysis["passive_count"],
         "hedge_count": analysis["hedge_count"],
+        "hedges_per_100_words": 100 * analysis["hedge_count"] / len(words) if words else 0.0,
+        "transition_count": analysis["transition_count"],
+        "transitions_per_100_words": 100 * analysis["transition_count"] / len(words) if words else 0.0,
+        "long_sentence_ratio": sum(length > 25 for _, length in analysis["sentences"]) / len(analysis["sentences"]) if analysis["sentences"] else 0.0,
+        "short_sentence_ratio": sum(length < 8 for _, length in analysis["sentences"]) / len(analysis["sentences"]) if analysis["sentences"] else 0.0,
         "transition_hits": analysis["transition_hits"][:8],
         "longest_paragraph": longest_paragraph,
         "paragraph_lengths": paragraph_lengths[:6],
@@ -171,57 +179,41 @@ def build_summary(metrics: dict[str, float | int | str | None], sentiment: dict[
     ]
 
 
-def render_basic_stats(metrics, sentiment, language_code):
+def render_basic_stats(metrics: dict, language_code: str) -> None:
+    """Show only the four headline measures; secondary counts live below."""
     t = translator(language_code)
-    st.subheader(t("summary"))
-    summary = build_summary(metrics, sentiment)
-    for sentence in summary:
-        st.write(f"- {sentence}")
-
-    stats_col1, stats_col2 = st.columns(2)
-    with stats_col1:
-        st.markdown(t("counts"))
-        st.write(t("characters_count", count=int(metrics["char_count"])))
-        st.write(t("syllables_count", count=int(metrics["syllable_count"])))
-        st.write(t("reading_time_value", time=format_reading_time(float(metrics["reading_minutes"]), language_code)))
-    with stats_col2:
-        st.markdown(t("interpretation"))
-        st.write(t("grade_help"))
-        st.write(t("reading_help"))
-        st.write(t("presence_help"))
-
-def render_diagnostics(t, extra_tools):
-        st.subheader(t("diagnostics"))
-        st.write(
-            t("diagnostics_help")
-            )
-        tool_col1, tool_col2, tool_col3, tool_col4 = st.columns(4)
-        tool_col1.metric(t("paragraphs"), int(extra_tools["paragraph_count"]))
-        tool_col2.metric(t("unique_words"), int(extra_tools["unique_words"]))
-        tool_col3.metric(t("lexical_diversity"), f"{float(extra_tools['lexical_diversity']):.2f}")
-        tool_col4.metric(t("passive_flags"), int(extra_tools["passive_count"]) if extra_tools["passive_count"] is not None else t("not_available"))
-
-        tool_col5, tool_col6, tool_col7 = st.columns(3)
-        tool_col5.metric(t("hedges"), int(extra_tools["hedge_count"]))
-        tool_col6.metric(t("transitions"), len(extra_tools["transition_hits"]))
-        tool_col7.metric(t("longest_paragraph"), t("word_count", count=int(extra_tools["longest_paragraph"])))
-
-        st.markdown(t("diagnostics_meaning"))
-        st.write(t("paragraph_help"))
-        st.write(t("lexical_help"))
-        st.write(t("passive_help"))
-        st.write(t("hedge_help"))
-        st.write(t("transition_help"))
-
-        if extra_tools["transition_hits"]:
-            st.markdown(t("detected_transitions"))
-            st.write(", ".join(str(item) for item in extra_tools["transition_hits"]))
-
-        if extra_tools["paragraph_lengths"]:
-            st.markdown(t("paragraph_sizes"))
-            st.write(", ".join(t("word_count", count=count) for count in extra_tools["paragraph_lengths"]))
+    st.subheader(t("at_a_glance"))
+    words, reading_time, sentence_length, readability = st.columns(4)
+    words.metric(t("words"), f"{int(metrics['word_count']):,}")
+    reading_time.metric(t("read_time"), format_reading_time(float(metrics["reading_minutes"]), language_code))
+    sentence_length.metric(t("average_sentence"), f"{float(metrics['avg_sentence_length']):.1f}",
+                           help=t("average_sentence_help"))
+    readability.metric(t("reading_ease"), f"{float(metrics['reading_ease']):.1f}", help=t("reading_help"))
 
 
+def render_diagnostics(t, extra_tools: dict, metrics: dict) -> None:
+    """One compact table replaces repeated metric cards and explanatory blocks."""
+    rows = [
+        (t("sentences"), str(metrics["sentence_count"]), ""),
+        (t("characters"), str(metrics["char_count"]), ""),
+        (t("syllables"), str(metrics["syllable_count"]), ""),
+        (t("paragraphs"), str(extra_tools["paragraph_count"]), ""),
+        (t("longest_paragraph"), t("word_count", count=int(extra_tools["longest_paragraph"])), ""),
+        (t("unique_words"), str(extra_tools["unique_words"]), ""),
+        (t("lexical_diversity"), f"{float(extra_tools['lexical_diversity']):.2f}", t("lexical_ratio_help")),
+        (t("passive_flags"), str(extra_tools["passive_count"]) if extra_tools["passive_count"] is not None else t("not_available"), t("passive_help")),
+        (t("hedges"), str(extra_tools["hedge_count"]), t("hedge_help")),
+        (t("transitions"), str(extra_tools["transition_count"]), t("transition_help")),
+    ]
+    if metrics["fk_grade"] is not None:
+        rows.append((t("grade"), f"{float(metrics['fk_grade']):.1f}", t("grade_help")))
+    st.dataframe(
+        [{t("statistic"): name, t("statistic_value"): value, t("statistic_note"): note}
+         for name, value, note in rows],
+        hide_index=True, width="stretch",
+    )
+    if extra_tools["transition_hits"]:
+        st.caption(t("transition_examples", terms=", ".join(extra_tools["transition_hits"])))
 
 
 @st.cache_data(show_spinner=False)
@@ -275,33 +267,24 @@ def analyze_style(text: str, language_code: str = DEFAULT_LANGUAGE) -> dict[str,
     }
 
 
-def render_style(style: dict[str, object], show_examples: bool = True, language_code: str = DEFAULT_LANGUAGE) -> None:
+def render_style(style: dict, language_code: str = DEFAULT_LANGUAGE) -> None:
+    """Lead the tab with actionable priorities, without repeating the findings."""
     t = translator(language_code)
-    st.subheader(t("strengths"))
-    if style["strengths"]:
-        for item in style["strengths"]:
-            st.write(f"- {item}")
-    else:
-        st.write(t("no_strengths"))
-
     st.subheader(t("revision_priorities"))
     if style["improvements"]:
-        for item in style["improvements"]:
-            st.write(f"- {item}")
+        st.markdown("\n".join(f"{index}. {item}" for index, item in enumerate(style["improvements"], 1)))
     else:
-        st.write(t("no_revision_flags"))
+        st.write(t("no_revision_flags").lstrip("- "))
 
-    if style["repeated_terms"]:
-        st.subheader(t("repeated_terms"))
-        repeated_text = ", ".join(f"{word} ({count})" for word, count in style["repeated_terms"])
-        st.write(repeated_text)
 
+def render_style_details(style: dict, show_examples: bool, language_code: str) -> None:
+    t = translator(language_code)
+    if style["strengths"]:
+        st.markdown(f"**{t('strengths')}**")
+        st.markdown("\n".join(f"- {item}" for item in style["strengths"]))
     if show_examples:
-        if style["long_sentences"]:
-            st.subheader(t("long_sentences"))
-            for sentence in style["long_sentences"]:
-                st.code(sentence, language=None)
-        if style["short_sentences"]:
-            st.subheader(t("short_sentences"))
-            for sentence in style["short_sentences"]:
-                st.code(sentence, language=None)
+        for key in ("long_sentences", "short_sentences"):
+            if style[key]:
+                st.markdown(f"**{t(key)}**")
+                for sentence in style[key]:
+                    st.write(sentence)

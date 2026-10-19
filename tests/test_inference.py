@@ -1,4 +1,4 @@
-"""Regression coverage for the CSCS client and the complete seventh-tab workflow."""
+"""Regression coverage for the CSCS client and the journalistic angle workflow."""
 
 import io
 import json
@@ -105,8 +105,8 @@ class InferenceTabTests(unittest.TestCase):
             dashboard.text_area(key="writing_text").set_value(FRENCH)
             dashboard.button(key="analyze_writing").click().run()
             self.assertFalse(dashboard.exception)
-            self.assertEqual(len(dashboard.tabs), 7)
-            self.assertEqual(dashboard.tabs[6].label, translator("fr")("journalistic_angle"))
+            self.assertEqual(len(dashboard.tabs), 6)
+            self.assertEqual(dashboard.tabs[5].label, translator("fr")("journalistic_angle"))
             request.assert_not_called()
 
             dashboard.text_area(key="angle_prompt_fr").set_value("Mon angle personnalisé.")
@@ -130,11 +130,13 @@ class InferenceTabTests(unittest.TestCase):
             self.assertFalse(dashboard.exception)
             self.assertEqual(dashboard.text_area(key="angle_result_fr").value, "Nouveau résultat.")
 
-            dashboard.text_area(key="writing_text").set_value(ENGLISH).run()
+            dashboard.text_area(key="writing_text").set_value(ENGLISH)
+            dashboard.button(key="analyze_writing").click().run()
             self.assertFalse(dashboard.exception)
             self.assertEqual(dashboard.text_area(key="angle_result_en").value, "")
             self.assertEqual(request.call_count, 3)
-            dashboard.text_area(key="writing_text").set_value(FRENCH).run()
+            dashboard.text_area(key="writing_text").set_value(FRENCH)
+            dashboard.button(key="analyze_writing").click().run()
             self.assertEqual(dashboard.text_area(key="angle_prompt_fr").value, "Mon angle personnalisé.")
             self.assertEqual(dashboard.text_area(key="angle_result_fr").value, "Nouveau résultat.")
 

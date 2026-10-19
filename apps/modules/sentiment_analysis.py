@@ -120,6 +120,26 @@ def sentiment_csv(report: SentimentReport) -> str:
     return output.getvalue()
 
 
+SENTIMENT_METRIC_KEYS = (
+    "sentiment_compound", "sentiment_positive", "sentiment_neutral", "sentiment_negative",
+    "sentiment_sentence_mean", "sentiment_sentence_min", "sentiment_sentence_max",
+    "sentiment_positive_sentence_ratio", "sentiment_neutral_sentence_ratio", "sentiment_negative_sentence_ratio",
+)
+
+
+def sentiment_dimensions(text: str, language_code: str) -> dict:
+    report = analyze_sentiment_report(text, language_code)
+    compounds = [row["compound"] for row in report.sentences]
+    return {
+        **{f"sentiment_{key}": report.overall[key] for key in ("compound", "positive", "neutral", "negative")},
+        "sentiment_sentence_mean": report.mean_sentence_compound,
+        "sentiment_sentence_min": min(compounds) if compounds else None,
+        "sentiment_sentence_max": max(compounds) if compounds else None,
+        **{f"sentiment_{label.lower()}_sentence_ratio": report.sentence_counts[label] / len(compounds) if compounds else 0.0
+           for label in ("Positive", "Neutral", "Negative")},
+    }
+
+
 def render_sentiment(text: str, language_code: str = "en") -> None:
     import altair as alt
 

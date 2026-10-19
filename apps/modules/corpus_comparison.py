@@ -8,8 +8,9 @@ import pandas as pd
 import streamlit as st
 
 from .corpus_reference import (
-    METRIC_KEYS, REFERENCE_PATH, comparison_values,
+    METRIC_KEYS, REFERENCE_PATH, comparison_values, STYLE_METRIC_KEYS, SENTIMENT_METRIC_KEYS,
 )
+from .pos_highlighting import BREAKDOWN_LABELS
 
 
 COPY = {
@@ -82,6 +83,43 @@ GROUPS = {
 }
 HELP_KEYS = dict(zip(GROUPS, ("paragraph_help", "sentence_help", "syllable_help", "character_help", "readability_help")))
 COUNT_METRICS = {"word_count", "paragraph_count", "sentence_count", "syllable_count", "char_count"}
+
+GROUPS.update({
+    "vocabulary": ("word_count", "unique_words", "lexical_diversity", "lemma_diversity", "stopword_ratio", "avg_word_length"),
+    "style": STYLE_METRIC_KEYS,
+    "sentiment": SENTIMENT_METRIC_KEYS,
+    "syntax": ("token_count", "entity_count", "entities_per_100_words", "avg_dependency_distance"),
+    **{kind: tuple(f"{kind}_{label}_{suffix}" for label in labels for suffix in ("count", "ratio"))
+       for kind, labels in BREAKDOWN_LABELS.items()},
+})
+COUNT_METRICS.update(key for key in METRIC_KEYS if key.endswith("_count"))
+COUNT_METRICS.update(("unique_words", "longest_paragraph"))
+for language, copy in COPY.items():
+    french = language == "fr"
+    copy.update({
+        "vocabulary": "Vocabulaire" if french else "Vocabulary",
+        "style": "Style", "sentiment": "Sentiment VADER", "syntax": "Structure spaCy",
+        "pos": "Classes grammaticales" if french else "Parts of speech",
+        "dep": "Dépendances" if french else "Dependencies",
+        "entity": "Entités nommées" if french else "Named entities", "morph": "Morphologie" if french else "Morphology",
+        "dimensions_help": ("Parts grammaticales, syntaxiques et morphologiques : fraction des tokens hors espaces. Entités : fraction des mentions. Les étiquettes absentes du modèle de cette langue sont exclues."
+                            if french else "POS, dependency and morphology shares are fractions of non-space tokens. Entity shares are fractions of mentions. Labels unsupported by this language's model are excluded."),
+        "sentiment_help": ("VADER : score global de −1 à +1 ; parts de 0 à 1. Les statistiques par phrase utilisent le découpage du volet Sentiment. Les scores français et anglais ne sont pas directement comparables."
+                           if french else "VADER: compound −1 to +1; shares 0 to 1. Sentence statistics use the Sentiment tab's segmentation. English and French scores are not directly comparable."),
+        "style_help": ("Diversité lexicale : formes uniques / mots ; diversité des lemmes : lemmes uniques / mots. Phrases longues : > 25 mots ; courtes : < 8. Les diagnostics sont des heuristiques."
+                       if french else "Lexical diversity: unique surface forms / words; lemma diversity: unique lemmas / words. Long sentences: > 25 words; short: < 8. Style diagnostics are heuristics."),
+        "scatter": "Croiser deux dimensions" if french else "Compare any two dimensions",
+        "x_axis": "Axe X" if french else "X axis", "y_axis": "Axe Y" if french else "Y axis",
+        "all_metrics": "Toutes les dimensions (CSV)" if french else "Download all dimensions (CSV)",
+    })
+    for key in METRIC_KEYS:
+        copy.setdefault(key, key.replace("_", " ").capitalize())
+    for kind, labels in BREAKDOWN_LABELS.items():
+        for label in labels:
+            copy[f"{kind}_{label}_count"] = f"{label} · {'nombre' if french else 'count'}"
+            copy[f"{kind}_{label}_ratio"] = f"{label} · {'part' if french else 'share'}"
+HELP_KEYS.update({group: "dimensions_help" for group in ("syntax", *BREAKDOWN_LABELS)})
+HELP_KEYS.update(vocabulary="style_help", style="style_help", sentiment="sentiment_help")
 
 
 @st.cache_data(show_spinner=False, max_entries=1)
@@ -172,7 +210,7 @@ def build_chart(values, current: float, metric: str, language: str) -> alt.Layer
     return alt.layer(band, bars, reference, marker, label).properties(height=330).interactive(bind_y=False).configure_view(stroke=None)
 
 
-def render_corpus_comparison(metrics: dict, extra: dict, language: str) -> None:
+def render_corpus_comparison(metrics: dict, extra: dict, language: str, sentiment: dict | None = None) -> None:
     copy = COPY[language]
     st.subheader(copy["title"])
     st.write(copy["intro"])
@@ -185,11 +223,17 @@ def render_corpus_comparison(metrics: dict, extra: dict, language: str) -> None:
     except (OSError, ValueError, KeyError):
         st.warning(copy["missing"])
         return
-    group = st.pills(copy["category"], list(GROUPS), format_func=copy.get,
+    current_values = comparison_values(metrics, extra, sentiment)
+    available = [key for key in METRIC_KEYS if current_values.get(key) is not None and np.isfinite(current_values[key])]
+    groups = [group for group, keys in GROUPS.items() if any(key in available for key in keys)]
+    group = st.pills(copy["category"], groups, format_func=copy.get,
                      default="sentences", key=f"corpus_group_{language}") or "sentences"
-    options = [key for key in GROUPS[group] if key != "fk_grade" or language == "en"]
-    metric = st.radio(copy["measure"], options, format_func=copy.get, horizontal=True,
-                      key=f"corpus_metric_{language}_{group}")
+    options = [key for key in GROUPS[group] if key in available]
+    if len(options) > 12:
+        metric = st.selectbox(copy["measure"], options, format_func=copy.get, key=f"corpus_metric_{language}_{group}")
+    else:
+        metric = st.radio(copy["measure"], options, format_func=copy.get, horizontal=True,
+                          key=f"corpus_metric_{language}_{group}")
     language_frame = select_cohort(frame, language)
     if language_frame.empty:
         st.info(copy["empty"])
@@ -204,7 +248,7 @@ def render_corpus_comparison(metrics: dict, extra: dict, language: str) -> None:
     cohort = select_cohort(frame, language, medium, years)
     values = pd.to_numeric(cohort[metric], errors="coerce")
     values = values[np.isfinite(values)]
-    current = comparison_values(metrics, extra)[metric]
+    current = current_values[metric]
     summary = distribution_summary(values, current)
     if not summary["n"]:
         st.info(copy["empty"])
@@ -233,3 +277,34 @@ def render_corpus_comparison(metrics: dict, extra: dict, language: str) -> None:
     }])
     st.download_button(copy["download"], download.to_csv(index=False),
                        file_name="jam_comparison.csv", mime="text/csv", key="corpus_download")
+    with st.expander(copy["scatter"]):
+        x = st.selectbox(copy["x_axis"], available, format_func=copy.get, key=f"corpus_x_{language}")
+        y = st.selectbox(copy["y_axis"], available, index=available.index("sentiment_compound") if "sentiment_compound" in available else 1,
+                         format_func=copy.get, key=f"corpus_y_{language}")
+        st.altair_chart(build_scatter(cohort, current_values, x, y, language), width="stretch")
+    all_rows = []
+    for key in available:
+        stats = distribution_summary(cohort[key], current_values[key])
+        all_rows.append({"metric": key, "language": language, "medium": medium or "all",
+                         "year_from": years[0], "year_to": years[1], "your_value": current_values[key],
+                         "reference_median": stats["median"], "reference_articles": stats["n"],
+                         "percentile": stats["percentile"] if stats["n"] >= 5 else None})
+    st.download_button(copy["all_metrics"], pd.DataFrame(all_rows).to_csv(index=False),
+                       file_name="jam_all_dimensions.csv", mime="text/csv")
+
+
+def build_scatter(cohort: pd.DataFrame, current: dict, x: str, y: str, language: str) -> alt.LayerChart:
+    """Explicit column aliases support identical axes and punctuation in spaCy labels."""
+    copy = COPY[language]
+    points = pd.DataFrame({"x": cohort[x], "y": cohort[y], "article_id": cohort.article_id,
+                           "medium": cohort.medium, "year": cohort.year})
+    points = points.loc[np.isfinite(points.x) & np.isfinite(points.y)]
+    reference = alt.Chart(points).mark_circle(opacity=.45, size=40).encode(
+        x=alt.X("x:Q", title=copy[x], scale=alt.Scale(zero=False)),
+        y=alt.Y("y:Q", title=copy[y], scale=alt.Scale(zero=False)),
+        tooltip=["article_id:N", "medium:N", "year:O", "x:Q", "y:Q"], color=alt.value("#319b98"),
+    )
+    marker = alt.Chart(pd.DataFrame({"x": [current[x]], "y": [current[y]], "label": [copy["your"]]})).mark_point(
+        shape="diamond", filled=True, size=180, color="#f97316",
+    ).encode(x="x:Q", y="y:Q", tooltip=["label:N", "x:Q", "y:Q"])
+    return alt.layer(reference, marker).properties(height=380).interactive()

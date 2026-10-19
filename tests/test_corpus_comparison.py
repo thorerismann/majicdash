@@ -56,7 +56,7 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual(len(select_cohort(frame, "fr", "Ecrit")), 253)
         self.assertTrue(set(METRIC_KEYS).issubset(frame.columns))
         self.assertNotIn("body_text", frame)
-        self.assertLess(REFERENCE_PATH.stat().st_size, 150_000)
+        self.assertLess(REFERENCE_PATH.stat().st_size, 2_000_000)
         self.assertTrue(frame.loc[frame.language == "fr", "fk_grade"].isna().all())
 
     def test_single_csv_loads_and_invalid_schema_is_rejected(self):
@@ -125,7 +125,8 @@ class ComparisonTests(unittest.TestCase):
         app = AppTest.from_file(str(app_path), default_timeout=60).run()
         app.text_area(key="writing_text").set_value(
             "Les écoles ferment. Une école ouvre. Cette école grandit.\n\nLes enfants lisent des livres."
-        ).run()
+        )
+        app.button(key="analyze_writing").click().run()
         self.assertFalse(app.exception)
 
         def displayed(label):
@@ -147,7 +148,8 @@ class ComparisonTests(unittest.TestCase):
         self.assertEqual(displayed("Articles de référence"), str(expected))
 
         app.selectbox(key="language_choice").set_value("en").run()
-        app.text_area(key="writing_text").set_value("The journalist writes an article. She checks every source.").run()
+        app.text_area(key="writing_text").set_value("The journalist writes an article. She checks every source.")
+        app.button(key="analyze_writing").click().run()
         self.assertFalse(app.exception)
         self.assertEqual(displayed("Reference articles"), "3")
         self.assertEqual(displayed("Percentile"), "—")

@@ -1,6 +1,6 @@
-"""Journalistic angle inference: API access, tab rendering, and editable drafts.
+"""Apertus API access and journalistic angle drafts.
 
-This module owns the complete seventh tab. ``render_angle_analysis`` receives
+This module owns the journalistic angle tab. ``render_angle_analysis`` receives
 the source text and language, displays the editable prompt, sends a request only
 when Generate is clicked, and displays the editable response or a localised error.
 Prompt/result drafts are kept separately for French and English across reruns.
@@ -50,7 +50,7 @@ def get_api_key() -> str:
     return ""
 
 
-def request_angle_analysis(text: str, prompt: str, language_code: str = DEFAULT_LANGUAGE) -> str:
+def _request_analysis(text: str, prompt: str, language_code: str = DEFAULT_LANGUAGE) -> str:
     """Send one explicit request; reject empty input and unusable API responses."""
     t = translator(language_code)
     if not text.strip():
@@ -92,6 +92,10 @@ def request_angle_analysis(text: str, prompt: str, language_code: str = DEFAULT_
     if not isinstance(content, str) or not content.strip():
         raise RuntimeError(t("api_no_analysis"))
     return content.strip()
+
+
+def request_angle_analysis(text: str, prompt: str, language_code: str = DEFAULT_LANGUAGE) -> str:
+    return _request_analysis(text, prompt, language_code)
 
 
 def save_angle_draft(field: str, language_code: str) -> None:

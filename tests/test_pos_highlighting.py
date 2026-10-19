@@ -38,19 +38,19 @@ class PosHighlightingTests(unittest.TestCase):
                 "peuvent parfois sembler élevés."
             )
             with self.subTest(apostrophe=apostrophe):
-                markup, counts = highlight_parts_of_speech(text, "fr_core_news_md", {"VERB"})
+                markup, counts = highlight_parts_of_speech(text, "fr_core_news_sm", {"VERB"})
                 parsed = HighlightParser(markup)
                 self.assertIn("ancre", parsed.marked)
                 self.assertNotIn("essor", parsed.marked)
                 self.assertEqual("".join(parsed.text), text)
-                self.assertEqual(counts["VERB"], part_of_speech_counts(text, "fr_core_news_md")["VERB"])
-                nouns, _ = highlight_parts_of_speech(text, "fr_core_news_md", {"NOUN"})
+                self.assertEqual(counts["VERB"], part_of_speech_counts(text, "fr_core_news_sm")["VERB"])
+                nouns, _ = highlight_parts_of_speech(text, "fr_core_news_sm", {"NOUN"})
                 self.assertIn("essor", HighlightParser(nouns).marked)
 
     def test_auxiliaries_are_included_in_verbs(self):
         for model, text, auxiliary in (
-            ("fr_core_news_md", "Les enfants sont heureux.", "sont"),
-            ("en_core_web_md", "The children are happy.", "are"),
+            ("fr_core_news_sm", "Les enfants sont heureux.", "sont"),
+            ("en_core_web_sm", "The children are happy.", "are"),
         ):
             with self.subTest(model=model):
                 markup, counts = highlight_parts_of_speech(text, model, {"VERB"})
@@ -60,8 +60,8 @@ class PosHighlightingTests(unittest.TestCase):
 
     def test_compound_verbs_and_counts_when_highlights_are_disabled(self):
         for model, text, verbs in (
-            ("fr_core_news_md", "Les enfants ont mangé.", {"ont", "mangé"}),
-            ("en_core_web_md", "The children have eaten.", {"have", "eaten"}),
+            ("fr_core_news_sm", "Les enfants ont mangé.", {"ont", "mangé"}),
+            ("en_core_web_sm", "The children have eaten.", {"have", "eaten"}),
         ):
             with self.subTest(model=model):
                 selected = analyze_parts_of_speech(text, model, {"VERB"})
@@ -76,7 +76,7 @@ class PosHighlightingTests(unittest.TestCase):
     def test_original_text_and_html_escaping_are_preserved(self):
         text = "  L’école s’ancre ici.\n\n\t<script>alert('x')</script> & lʼœuvre.  "
         for selected in (set(), {"VERB", "NOUN", "ADJ", "ADV"}):
-            markup, _ = highlight_parts_of_speech(text, "fr_core_news_md", selected)
+            markup, _ = highlight_parts_of_speech(text, "fr_core_news_sm", selected)
             self.assertEqual("".join(HighlightParser(markup).text), text)
             self.assertNotIn("<script>", markup)
 
