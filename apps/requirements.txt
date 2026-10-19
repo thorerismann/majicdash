@@ -1,0 +1,3 @@
+# Community Cloud checks the entrypoint directory before the repository root.
+# Use the shared pip dependencies here; environment.yml remains for local Mamba.
+-r ../requirements.txt
