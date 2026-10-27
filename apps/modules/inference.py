@@ -23,7 +23,7 @@ import streamlit as st
 from .language import DEFAULT_LANGUAGE, translator
 
 API_URL = "https://api.inference.cscs.ch/v1/chat/completions"
-MODEL = "swiss-ai/Apertus-8B-Instruct-2509"
+MODEL = "swiss-ai/Apertus-v1.5-8B"
 
 
 def get_api_key() -> str:
