@@ -9,7 +9,6 @@ the separate inference module owns generated journalistic angle analyses.
 
 import json
 import streamlit as st
-import streamlit.components.v1 as components
 from .language import DEFAULT_LANGUAGE, translator, get_words
 from pathlib import Path
 
@@ -38,7 +37,7 @@ def render_visual_angle(language_code: str):
     t = translator(language_code)
     angle_html = load_angle_machine_html(language_code)
     if angle_html:
-        components.html(angle_html, height=980, scrolling=False)
+        st.iframe(angle_html, height=980)
     else:
         st.warning(t("angle_missing"))
 

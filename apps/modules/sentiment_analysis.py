@@ -174,7 +174,7 @@ def render_sentiment(text: str, language_code: str = "en") -> None:
         y=alt.Y("compound:Q", title="Compound sentiment", scale=alt.Scale(domain=[-1, 1])),
         tooltip=[alt.Tooltip("sentence:Q"), alt.Tooltip("compound:Q", format="+.3f"), "label:N", "text:N"],
     )
-    st.altair_chart(chart, use_container_width=True)
+    st.altair_chart(chart, width="stretch")
 
     st.subheader("Passages to review")
     for column, label, reverse in zip(st.columns(2), ("Positive", "Negative"), (True, False)):
@@ -191,7 +191,7 @@ def render_sentiment(text: str, language_code: str = "en") -> None:
                 st.text(row["text"])
 
     with st.expander("All sentence scores"):
-        st.dataframe(report.sentences, hide_index=True, use_container_width=True)
+        st.dataframe(report.sentences, hide_index=True, width="stretch")
     st.download_button(
         "Download sentence scores (CSV)", data=sentiment_csv(report),
         file_name=f"sentiment_{language_code}.csv", mime="text/csv", key="sentiment_csv",
