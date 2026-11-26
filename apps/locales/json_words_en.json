@@ -10,8 +10,8 @@
     "fr": "French",
     "unknown": "Unknown",
     "sentence_flags": "Show sentence flags",
-    "local_notice": "Language and sentiment analysis run locally. Journalistic angle generation sends your text and prompt to CSCS Apertus only when you click Generate.",
-    "tools": "Tools Used",
+    "local_notice": "Language and sentiment analysis run locally. The AI summary sends your text and computed analysis to CSCS Apertus; journalistic angle generation sends your text and prompt. Each request runs only when you click its Generate button.",
+    "tools": "Packages and their roles",
     "input_label": "Paste writing to analyze",
     "input_placeholder": "Paste up to a few pages of writing here.",
     "analyze": "Analyze Writing",
@@ -26,14 +26,14 @@
     "reading_ease": "Reading Ease",
     "average_sentence": "Avg Sentence",
     "not_available": "N/A",
-    "basic_stats": "Basic Stats",
+    "basic_stats": "Writing analysis",
     "style": "Style",
     "sentiment": "Sentiment",
-    "pos": "Parts of Speech",
+    "pos": "Grammar and syntax",
     "ai_critique": "AI Critique",
-    "angle_machine": "Angle Machine",
+    "angle_machine": "Angle machine",
     "diagnostics": "Writing Diagnostics",
-    "journalistic_angle": "Journalistic Angle",
+    "journalistic_angle": "Journalistic angle",
     "summary": "Local Summary",
     "counts": "**Counts**",
     "interpretation": "**Interpretation**",
@@ -187,7 +187,38 @@
     "statistic_note": "Meaning",
     "average_sentence_help": "Average number of words per sentence.",
     "lexical_ratio_help": "Unique word forms divided by total words. Higher is not necessarily better.",
-    "transition_examples": "Examples of detected transitions: {terms}"
+    "transition_examples": "Examples of detected transitions: {terms}",
+    "credits": "Show credits and packages",
+    "generation_credit": "**Generative AI · Apertus** — The AI summary prioritizes improvements using the text and computed analysis; the journalistic angle tool drafts angles. Both use the Swiss AI Apertus model (`{model}`) through the CSCS inference API.",
+    "development_credit": "**Development** — Built with assistance from OpenAI Codex.",
+    "display": "Analysis to run",
+    "analysis_view": "Analysis to run",
+    "ai_summary": "AI summary",
+    "summary_intro": "The five changes that would most improve this text: evidence, why each matters, and what to do next.",
+    "summary_sends": "Generate sends your text and the full set of computed analysis results to Apertus via CSCS. You do not need to open the other analyses first.",
+    "summary_generate": "Find my top 5 priorities",
+    "summary_regenerate": "Refresh my priorities",
+    "summary_working": "Gathering the analysis and asking Apertus to prioritize improvements…",
+    "summary_download": "Download the review",
+    "summary_evidence": "Analysis sent to Apertus",
+    "summary_corpus_scope": "Corpus comparisons use same-language written articles when available, across all years, independently of the chart filters. Missing reference data is marked in the report.",
+    "highlight_text": "Findings in your text",
+    "highlight_show": "Highlight",
+    "highlight_all": "All findings",
+    "highlight_long_sentences": "Long sentences",
+    "highlight_repetition": "Repetition",
+    "highlight_long_reason": "Long sentence · {count} words",
+    "highlight_repeat_reason": "Repeated lemma: {term} · {count} occurrences",
+    "highlight_style_help": "Yellow highlights mark sentences of 28 words or more and occurrences of the repeated content words listed in the analysis. Hover for details. These are prompts for review, not automatic errors.",
+    "highlight_none": "No passages match this selection.",
+    "highlight_ai_help": "Yellow highlights show verified source passages for the selected priority. The original text is preserved.",
+    "summary_select_priority": "Select a priority to see it in your text",
+    "summary_metric_evidence": "Evidence",
+    "summary_why_it_matters": "Why it matters",
+    "summary_suggestion": "What to change",
+    "summary_unmatched": "{count} citation(s) could not be matched unambiguously to the original text and were not highlighted.",
+    "summary_no_anchor": "No verified passage to highlight for this finding. It may concern the document as a whole.",
+    "summary_invalid_format": "Apertus returned an incomplete or incorrectly formatted review. Please generate it again."
   },
   "vocabulary": {
     "transitions": [
@@ -354,37 +385,47 @@
     {
       "name": "Streamlit",
       "url": "https://streamlit.io",
-      "purpose": "App framework"
+      "purpose": "Interactive interface, controls, and analysis views."
+    },
+    {
+      "name": "spaCy",
+      "url": "https://spacy.io",
+      "purpose": "Local English and French analysis with en_core_web_sm and fr_core_news_sm: words, sentences, parts of speech, syntax, morphology, and named entities."
     },
     {
       "name": "textstat",
       "url": "https://pypi.org/project/textstat/",
-      "purpose": "Readability metrics"
+      "purpose": "Readability measures adapted to the text language."
     },
     {
-      "name": "VADER Sentiment",
+      "name": "vaderSentiment",
       "url": "https://github.com/cjhutto/vaderSentiment",
-      "purpose": "Local sentiment scoring"
+      "purpose": "Dictionary- and rule-based sentiment scores for English documents and sentences."
+    },
+    {
+      "name": "vaderSentiment-fr",
+      "url": "https://github.com/thomas7lieues/vader_FR",
+      "purpose": "French adaptation of VADER for document and sentence sentiment scores."
     },
     {
       "name": "langdetect",
       "url": "https://pypi.org/project/langdetect/",
-      "purpose": "Language detection"
+      "purpose": "Automatic text-language detection, with a manual French or English override."
     },
     {
-      "name": "ChatGPT",
-      "url": "https://chatgpt.com",
-      "purpose": "Optional external AI critique"
+      "name": "Altair",
+      "url": "https://altair-viz.github.io/",
+      "purpose": "Interactive distributions and scatterplots for corpus comparisons."
     },
     {
-      "name": "Claude",
-      "url": "https://claude.ai",
-      "purpose": "Optional external AI critique"
+      "name": "pandas",
+      "url": "https://pandas.pydata.org/",
+      "purpose": "Reference-corpus tables, filtering, and CSV exports."
     },
     {
-      "name": "Gemini",
-      "url": "https://gemini.google.com",
-      "purpose": "Optional external AI critique"
+      "name": "NumPy",
+      "url": "https://numpy.org/",
+      "purpose": "Numerical calculations for corpus distributions and comparisons."
     }
   ],
   "language_code": "en"

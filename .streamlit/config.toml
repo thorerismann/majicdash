@@ -1,0 +1,32 @@
+# Compact native styling; keep Streamlit's light/dark appearance switch.
+[theme]
+font = "sans serif"
+baseFontSize = 15
+headingFontSizes = ["2rem", "1.5rem", "1.125rem", "1rem", "0.9rem", "0.85rem"]
+headingFontWeights = [650, 600, 600, 600, 600, 600]
+baseRadius = "0.5rem"
+buttonRadius = "0.5rem"
+showWidgetBorder = true
+showSidebarBorder = true
+paddingTop = "1.5rem"
+paddingBottom = "2rem"
+
+[theme.sidebar]
+headingFontSizes = ["1.25rem", "1.125rem", "1rem", "1rem", "0.9rem", "0.85rem"]
+paddingTop = "1.5rem"
+
+[theme.light]
+primaryColor = "#0F766E"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F4F7F7"
+textColor = "#182B2A"
+borderColor = "#D6E1DF"
+linkColor = "#0F766E"
+
+[theme.dark]
+primaryColor = "#0F766E"
+backgroundColor = "#101B1C"
+secondaryBackgroundColor = "#1B2B2C"
+textColor = "#E8F0EF"
+borderColor = "#334948"
+linkColor = "#5EEAD4"

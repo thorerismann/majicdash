@@ -10,8 +10,8 @@
     "fr": "Français",
     "unknown": "Inconnue",
     "sentence_flags": "Afficher les phrases à revoir",
-    "local_notice": "Les analyses linguistiques et de sentiment sont locales. La génération d’angles envoie votre texte et votre consigne à CSCS Apertus uniquement lorsque vous cliquez sur Générer.",
-    "tools": "Outils utilisés",
+    "local_notice": "Les analyses linguistiques et de sentiment sont locales. La synthèse IA envoie votre texte et les analyses calculées à CSCS Apertus ; la génération d’angles envoie votre texte et votre consigne. Chaque requête est lancée uniquement avec son bouton de génération.",
+    "tools": "Bibliothèques et leurs rôles",
     "input_label": "Collez le texte à analyser",
     "input_placeholder": "Collez ici jusqu’à quelques pages de texte.",
     "analyze": "Analyser le texte",
@@ -26,10 +26,10 @@
     "reading_ease": "Facilité de lecture",
     "average_sentence": "Longueur moyenne des phrases",
     "not_available": "N/D",
-    "basic_stats": "Statistiques de base",
+    "basic_stats": "Analyse rédactionnelle",
     "style": "Style",
     "sentiment": "Sentiment",
-    "pos": "Classes grammaticales",
+    "pos": "Grammaire et syntaxe",
     "ai_critique": "Critique par IA",
     "angle_machine": "Machine à angler",
     "diagnostics": "Diagnostic rédactionnel",
@@ -187,7 +187,38 @@
     "statistic_note": "Signification",
     "average_sentence_help": "Nombre moyen de mots par phrase.",
     "lexical_ratio_help": "Formes distinctes divisées par le nombre de mots. Une valeur élevée n’est pas forcément meilleure.",
-    "transition_examples": "Exemples de transitions repérées : {terms}"
+    "transition_examples": "Exemples de transitions repérées : {terms}",
+    "credits": "Afficher les crédits et les bibliothèques",
+    "generation_credit": "**IA générative · Apertus** — La synthèse IA hiérarchise les améliorations à partir du texte et des analyses ; l’outil d’angles propose des angles journalistiques. Tous deux utilisent le modèle Apertus de Swiss AI (`{model}`), via l’API d’inférence du CSCS.",
+    "development_credit": "**Développement** — Application développée avec l’aide d’OpenAI Codex.",
+    "display": "Analyse à lancer",
+    "analysis_view": "Analyse à lancer",
+    "ai_summary": "Synthèse IA",
+    "summary_intro": "Les cinq changements les plus utiles pour améliorer ce texte : les indices, leur importance et les corrections à apporter.",
+    "summary_sends": "La génération envoie votre texte et l’ensemble des résultats d’analyse à Apertus via le CSCS. Il n’est pas nécessaire d’ouvrir les autres analyses au préalable.",
+    "summary_generate": "Trouver mes 5 priorités",
+    "summary_regenerate": "Actualiser mes priorités",
+    "summary_working": "Collecte des analyses et classement des améliorations par Apertus…",
+    "summary_download": "Télécharger la synthèse",
+    "summary_evidence": "Analyses envoyées à Apertus",
+    "summary_corpus_scope": "La comparaison utilise les articles écrits de même langue, lorsqu’ils sont disponibles, sur toutes les années, indépendamment des filtres des graphiques. Les données de référence manquantes sont signalées dans le rapport.",
+    "highlight_text": "Les points à revoir dans votre texte",
+    "highlight_show": "Surligner",
+    "highlight_all": "Tous les points",
+    "highlight_long_sentences": "Phrases longues",
+    "highlight_repetition": "Répétitions",
+    "highlight_long_reason": "Phrase longue · {count} mots",
+    "highlight_repeat_reason": "Lemme répété : {term} · {count} occurrences",
+    "highlight_style_help": "Le jaune signale les phrases de 28 mots ou plus et les occurrences des mots pleins répétés relevés dans l’analyse. Survolez pour les détails. Ce sont des pistes de révision, pas des erreurs automatiques.",
+    "highlight_none": "Aucun passage ne correspond à cette sélection.",
+    "highlight_ai_help": "Le jaune indique les passages vérifiés pour la priorité sélectionnée. Le texte original est conservé.",
+    "summary_select_priority": "Sélectionnez une priorité pour la retrouver dans le texte",
+    "summary_metric_evidence": "Indices",
+    "summary_why_it_matters": "Pourquoi c’est important",
+    "summary_suggestion": "Que modifier",
+    "summary_unmatched": "{count} citation(s) n’ont pas pu être associées sans ambiguïté au texte original et ne sont pas surlignées.",
+    "summary_no_anchor": "Aucun passage vérifié à surligner pour ce point. Il peut concerner le document dans son ensemble.",
+    "summary_invalid_format": "Apertus a renvoyé une synthèse incomplète ou mal structurée. Veuillez relancer la génération."
   },
   "vocabulary": {
     "transitions": [
@@ -407,37 +438,47 @@
     {
       "name": "Streamlit",
       "url": "https://streamlit.io",
-      "purpose": "Cadre de l’application"
+      "purpose": "Interface interactive, commandes et vues d’analyse."
+    },
+    {
+      "name": "spaCy",
+      "url": "https://spacy.io",
+      "purpose": "Analyse locale en anglais et en français avec en_core_web_sm et fr_core_news_sm : mots, phrases, classes grammaticales, syntaxe, morphologie et entités nommées."
     },
     {
       "name": "textstat",
       "url": "https://pypi.org/project/textstat/",
-      "purpose": "Mesures de lisibilité"
+      "purpose": "Mesures de lisibilité adaptées à la langue du texte."
     },
     {
-      "name": "VADER Sentiment",
+      "name": "vaderSentiment",
       "url": "https://github.com/cjhutto/vaderSentiment",
-      "purpose": "Analyse locale du sentiment"
+      "purpose": "Scores de sentiment des textes et des phrases en anglais, à partir d’un lexique et de règles."
+    },
+    {
+      "name": "vaderSentiment-fr",
+      "url": "https://github.com/thomas7lieues/vader_FR",
+      "purpose": "Adaptation française de VADER pour les scores de sentiment des textes et des phrases."
     },
     {
       "name": "langdetect",
       "url": "https://pypi.org/project/langdetect/",
-      "purpose": "Détection de la langue"
+      "purpose": "Détection automatique de la langue du texte, avec sélection manuelle du français ou de l’anglais."
     },
     {
-      "name": "ChatGPT",
-      "url": "https://chatgpt.com",
-      "purpose": "Critique IA externe facultative"
+      "name": "Altair",
+      "url": "https://altair-viz.github.io/",
+      "purpose": "Distributions et nuages de points interactifs pour comparer le texte au corpus."
     },
     {
-      "name": "Claude",
-      "url": "https://claude.ai",
-      "purpose": "Critique IA externe facultative"
+      "name": "pandas",
+      "url": "https://pandas.pydata.org/",
+      "purpose": "Tableaux du corpus de référence, filtres et exports CSV."
     },
     {
-      "name": "Gemini",
-      "url": "https://gemini.google.com",
-      "purpose": "Critique IA externe facultative"
+      "name": "NumPy",
+      "url": "https://numpy.org/",
+      "purpose": "Calculs numériques pour les distributions et les comparaisons au corpus."
     }
   ],
   "language_code": "fr"

@@ -32,17 +32,24 @@ def _analyze_text(text: str, language_code: str) -> dict:
     word_indices = {token.i for token in words}
     vocabulary = get_words(language_code)["vocabulary"]
     stopwords = set(vocabulary["stopwords"])
-    lemmas = [
-        token.lemma_.lower() for token in words
+    content_tokens = [
+        token for token in words
         if not token.is_stop and token.lower_ not in stopwords
         and token.lemma_.lower() not in stopwords
         and token.pos_ in {"NOUN", "VERB", "ADJ"}
     ]
-    sentences = [
-        (text[span.start_char:span.end_char].strip(),
-         sum(token.i in word_indices for token in span))
-        for span in doc.sents if span.text.strip()
-    ]
+    lemmas = [token.lemma_.lower() for token in content_tokens]
+    sentence_spans = []
+    for span in doc.sents:
+        original = text[span.start_char:span.end_char]
+        if not original.strip():
+            continue
+        start = span.start_char + len(original) - len(original.lstrip())
+        end = span.end_char - (len(original) - len(original.rstrip()))
+        sentence_spans.append({"sentence": len(sentence_spans) + 1, "text": text[start:end],
+                               "start": start, "end": end,
+                               "words": sum(token.i in word_indices for token in span)})
+    sentences = [(row["text"], row["words"]) for row in sentence_spans]
 
     # Paragraph boundaries are formatting, not grammatical sentence boundaries.
     paragraph_lengths = []
@@ -78,6 +85,9 @@ def _analyze_text(text: str, language_code: str) -> dict:
         "words": [token.lower_ for token in words],
         "lemmas": lemmas,
         "sentences": sentences,
+        "sentence_spans": sentence_spans,
+        "content_tokens": [{"lemma": token.lemma_.lower(), "start": token.idx,
+                            "end": token.idx + len(token)} for token in content_tokens],
         "paragraph_lengths": paragraph_lengths,
         "passive_count": len(passive_heads),
         "hedge_count": sum(category == "hedges" for category, _ in matches),
@@ -258,12 +268,25 @@ def analyze_style(text: str, language_code: str = DEFAULT_LANGUAGE) -> dict[str,
     if short_sentences:
         improvements.append(t("style_short"))
 
+    repeated = dict(repeated_terms)
+    highlights = [
+        {"start": row["start"], "end": row["end"], "kind": "long_sentences",
+         "label": t("highlight_long_reason", count=row["words"])}
+        for row in analysis["sentence_spans"] if row["words"] >= 28
+    ]
+    highlights.extend(
+        {"start": token["start"], "end": token["end"], "kind": "repetition",
+         "label": t("highlight_repeat_reason", term=token["lemma"], count=repeated[token["lemma"]])}
+        for token in analysis["content_tokens"] if token["lemma"] in repeated
+    )
+
     return {
         "strengths": strengths[:3],
         "improvements": improvements[:4],
         "repeated_terms": repeated_terms[:8],
         "long_sentences": long_sentences[:5],
         "short_sentences": short_sentences[:5],
+        "highlights": highlights,
     }
 
 
