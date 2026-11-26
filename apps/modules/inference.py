@@ -1,11 +1,11 @@
-"""Apertus API access and journalistic angle drafts.
+"""Shared Apertus API access and journalistic angle drafts.
 
 This module owns the journalistic angle tab. ``render_angle_analysis`` receives
 the source text and language, displays the editable prompt, sends a request only
 when Generate is clicked, and displays the editable response or a localised error.
 Prompt/result drafts are kept separately for French and English across reruns.
 
-``request_angle_analysis`` is the independently testable CSCS HTTP client.
+``request_analysis`` is the CSCS HTTP client shared with the AI summary.
 ``get_api_key`` reads Streamlit secrets, the environment, then the project .env;
 credentials are never displayed. UI wording comes from the locale dictionaries.
 """
@@ -50,7 +50,7 @@ def get_api_key() -> str:
     return ""
 
 
-def _request_analysis(text: str, prompt: str, language_code: str = DEFAULT_LANGUAGE) -> str:
+def request_analysis(text: str, prompt: str, language_code: str = DEFAULT_LANGUAGE) -> str:
     """Send one explicit request; reject empty input and unusable API responses."""
     t = translator(language_code)
     if not text.strip():
@@ -95,7 +95,7 @@ def _request_analysis(text: str, prompt: str, language_code: str = DEFAULT_LANGU
 
 
 def request_angle_analysis(text: str, prompt: str, language_code: str = DEFAULT_LANGUAGE) -> str:
-    return _request_analysis(text, prompt, language_code)
+    return request_analysis(text, prompt, language_code)
 
 
 def save_angle_draft(field: str, language_code: str) -> None:

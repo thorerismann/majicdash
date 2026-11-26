@@ -18,16 +18,16 @@ class InputTests(unittest.TestCase):
             app = AppTest.from_file(str(APP), default_timeout=60).run()
             self.assertFalse(app.exception)
             self.assertTrue(app.session_state['input_expanded'])
-            self.assertEqual(len(app.tabs), 0)
+            self.assertFalse(app.success)
             app.button(key='analyze_writing').click().run()
             self.assertFalse(app.exception)
             self.assertTrue(app.warning)
             self.assertTrue(app.session_state['input_expanded'])
             app.text_area(key='writing_text').set_value('  \n\t ')
             app.button(key='analyze_writing').click().run()
-            self.assertEqual(len(app.tabs), 0)
+            self.assertFalse(app.success)
             app.text_area(key='writing_text').set_value(TEXT).run()
-            self.assertEqual(len(app.tabs), 0)
+            self.assertFalse(app.success)
             analyze.assert_not_called()
             request.assert_not_called()
 
@@ -39,7 +39,8 @@ class InputTests(unittest.TestCase):
             self.assertFalse(app.exception)
             self.assertFalse(app.session_state['input_expanded'])
             self.assertEqual(app.text_area(key='writing_text').value, TEXT)
-            self.assertTrue(app.tabs)
+            self.assertTrue(app.success)
+            self.assertFalse(app.tabs)
             self.assertFalse(any(row.value == 'Suggested tags' for row in app.subheader))
             app.run()
             # Reopening the input and analyzing again must collapse it again.
@@ -48,7 +49,31 @@ class InputTests(unittest.TestCase):
             app.button(key='analyze_writing').click().run()
             self.assertFalse(app.session_state['input_expanded'])
             app.text_area(key='writing_text').set_value(' ').run()
-            self.assertEqual(len(app.tabs), 0)
+            self.assertFalse(app.success)
             app.button(key='analyze_writing').click().run()
             self.assertTrue(app.session_state['input_expanded'])
+            request.assert_not_called()
+
+    def test_menu_switches_views_without_resubmitting_or_calling_api(self):
+        with patch('modules.inference.urlopen') as request:
+            app = AppTest.from_file(str(APP), default_timeout=60).run()
+            app.text_area(key='writing_text').set_value(TEXT)
+            app.button(key='analyze_writing').click().run()
+            for view in ('basic_stats', 'sentiment', 'pos', 'angle_machine', 'journalistic_angle', 'ai_summary', 'comparison'):
+                with self.subTest(view=view):
+                    app.sidebar.radio(key='analysis_view').set_value(view).run()
+                    self.assertFalse(app.exception)
+                    self.assertFalse(app.tabs)
+                    self.assertTrue(app.success)
+                    self.assertEqual(app.session_state['submitted_text'], TEXT)
+                    self.assertEqual(app.text_area(key='writing_text').value, TEXT)
+                    self.assertFalse(app.session_state['input_expanded'])
+                    self.assertEqual(
+                        any(button.key == 'generate_angle' for button in app.button),
+                        view == 'journalistic_angle',
+                    )
+            app.sidebar.radio(key='analysis_view').set_value('sentiment').run()
+            app.sidebar.selectbox(key='language_choice').set_value('fr').run()
+            self.assertFalse(app.exception)
+            self.assertEqual(app.sidebar.radio(key='analysis_view').value, 'sentiment')
             request.assert_not_called()

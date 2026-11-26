@@ -95,7 +95,7 @@ class InferenceClientTests(unittest.TestCase):
                 self.assertIn(expected, str(raised.exception))
 
 
-class InferenceTabTests(unittest.TestCase):
+class InferenceViewTests(unittest.TestCase):
     def test_generate_edit_retry_and_language_switch_in_dashboard(self):
         from streamlit.testing.v1 import AppTest
 
@@ -105,8 +105,9 @@ class InferenceTabTests(unittest.TestCase):
             dashboard.text_area(key="writing_text").set_value(FRENCH)
             dashboard.button(key="analyze_writing").click().run()
             self.assertFalse(dashboard.exception)
-            self.assertEqual(len(dashboard.tabs), 6)
-            self.assertEqual(dashboard.tabs[5].label, translator("fr")("journalistic_angle"))
+            self.assertFalse(dashboard.tabs)
+            dashboard.sidebar.radio(key="analysis_view").set_value("journalistic_angle").run()
+            self.assertFalse(dashboard.exception)
             request.assert_not_called()
 
             dashboard.text_area(key="angle_prompt_fr").set_value("Mon angle personnalisé.")
@@ -117,6 +118,13 @@ class InferenceTabTests(unittest.TestCase):
             self.assertEqual(dashboard.text_area(key="angle_result_fr").value, "Premier résultat.")
 
             dashboard.text_area(key="angle_result_fr").set_value("Résultat corrigé.").run()
+            self.assertEqual(request.call_count, 1)
+            dashboard.sidebar.radio(key="analysis_view").set_value("sentiment").run()
+            self.assertFalse(dashboard.exception)
+            dashboard.sidebar.radio(key="analysis_view").set_value("journalistic_angle").run()
+            self.assertFalse(dashboard.exception)
+            self.assertEqual(dashboard.text_area(key="angle_prompt_fr").value, "Mon angle personnalisé.")
+            self.assertEqual(dashboard.text_area(key="angle_result_fr").value, "Résultat corrigé.")
             self.assertEqual(request.call_count, 1)
             request.side_effect = RuntimeError("Service temporairement indisponible.")
             dashboard.button(key="generate_angle").click().run()
